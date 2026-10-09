@@ -10,7 +10,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { ALL_STATUSES, INITIAL_STATUS, isLaptopStatus } from '@domain';
-import { Loader2Icon, TriangleAlertIcon } from 'lucide-react';
+import { LayoutGridIcon, Loader2Icon, ScrollTextIcon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -20,6 +20,7 @@ import { HistoryDialog } from '@/components/HistoryDialog';
 import { LaptopCardBody } from '@/components/LaptopCard';
 import { StatusColumn } from '@/components/StatusColumn';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { evaluateTargets, useBoard } from '@/lib/board';
 
 export function StatusBoard() {
@@ -129,42 +130,66 @@ export function StatusBoard() {
         onResetBoard={() => void board.reset()}
       />
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={(event: DragStartEvent) => setActiveId(String(event.active.id))}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveId(null)}
-        accessibility={{
-          screenReaderInstructions: {
-            draggable:
-              'Нажмите пробел, чтобы взять карточку ноутбука. Стрелками выберите колонку статуса, пробелом отпустите, Escape отменит перетаскивание.',
-          },
-        }}
-      >
-        {/* Колонки порождаются из ALL_STATUSES: добавится статус в домене — появится колонка. */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {ALL_STATUSES.map((status) => (
-            <StatusColumn
-              key={status}
-              status={status}
-              laptops={board.laptops.filter((item) => item.laptop.status === status)}
-              now={board.now}
-              verdict={verdicts?.find((verdict) => verdict.to === status) ?? null}
-              isSource={activeItem?.laptop.status === status}
-              onOpenHistory={setHistoryId}
-              // Куда приезжает новый ноутбук — знает домен, не вёрстка.
-              onAdd={status === INITIAL_STATUS ? () => void board.add() : undefined}
-            />
-          ))}
-        </div>
+      <Tabs defaultValue="board">
+        <TabsList>
+          <TabsTrigger value="board">
+            <LayoutGridIcon className="size-3.5" aria-hidden />
+            Доска
+          </TabsTrigger>
+          <TabsTrigger value="log">
+            <ScrollTextIcon className="size-3.5" aria-hidden />
+            Журнал попыток
+            {board.attempts.length > 0 && (
+              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {board.attempts.length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-        <DragOverlay>
-          {activeItem !== null && <LaptopCardBody item={activeItem} now={board.now} floating />}
-        </DragOverlay>
-      </DndContext>
+        <TabsContent value="board" className="mt-3">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={(event: DragStartEvent) => setActiveId(String(event.active.id))}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+            accessibility={{
+              screenReaderInstructions: {
+                draggable:
+                  'Нажмите пробел, чтобы взять карточку ноутбука. Стрелками выберите колонку статуса, пробелом отпустите, Escape отменит перетаскивание.',
+              },
+            }}
+          >
+            {/* Колонки порождаются из ALL_STATUSES: добавится статус в домене — появится колонка. */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {ALL_STATUSES.map((status) => (
+                <StatusColumn
+                  key={status}
+                  status={status}
+                  laptops={board.laptops.filter((item) => item.laptop.status === status)}
+                  now={board.now}
+                  verdict={verdicts?.find((verdict) => verdict.to === status) ?? null}
+                  isSource={activeItem?.laptop.status === status}
+                  onOpenHistory={setHistoryId}
+                  // Куда приезжает новый ноутбук — знает домен, не вёрстка.
+                  onAdd={status === INITIAL_STATUS ? () => void board.add() : undefined}
+                />
+              ))}
+            </div>
 
-      <EventLog entries={board.attempts} resolveModel={resolveModel} />
+            <DragOverlay>
+              {activeItem !== null && (
+                <LaptopCardBody item={activeItem} now={board.now} floating />
+              )}
+            </DragOverlay>
+          </DndContext>
+        </TabsContent>
+
+        <TabsContent value="log" className="mt-3">
+          <EventLog entries={board.attempts} resolveModel={resolveModel} />
+        </TabsContent>
+      </Tabs>
 
       <HistoryDialog item={historyItem} onClose={() => setHistoryId(null)} />
     </div>
