@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    /* Максимальная строгость: ошибки должны ловиться компилятором, а не тестами. */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+
+    /* Этот конфиг — только для проверки типов (включая тесты). Сборка — tsconfig.build.json. */
+    "noEmit": true,
+
+    /* Алиасы фронтенда. Для домена они не используются (web/ сюда не входит),
+       но объявлены здесь, потому что их читают редактор и CLI shadcn/ui.
+       Проверка типов самого фронтенда — в tsconfig.web.json. */
+    "paths": {
+      "@/*": ["./web/src/*"],
+      "@domain": ["./src/index.ts"]
+    }
+  },
+  "include": ["src", "server", "tests", "vitest.config.ts"]
+}
