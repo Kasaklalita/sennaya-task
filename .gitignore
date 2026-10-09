@@ -8,3 +8,6 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Временные замки Word: появляются, когда открыт .docx
+~$*
