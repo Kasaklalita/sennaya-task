@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { AttemptView } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, humanizeDates } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 interface EventLogProps {
@@ -77,7 +77,7 @@ export function EventLog({ entries, resolveModel }: EventLogProps) {
                   {/* whitespace-normal бить nowrap из TableCell: текст домена
                       длинный, он должен переноситься, а не обрезаться. */}
                   <TableCell className="min-w-80 text-xs leading-snug whitespace-normal text-muted-foreground">
-                    {entry.message}
+                    {humanizeDates(entry.message)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-[10px] whitespace-nowrap text-muted-foreground">
                     {formatDateTime(entry.modelNow)}

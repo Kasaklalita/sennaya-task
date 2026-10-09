@@ -21,6 +21,7 @@ import { LaptopCardBody } from '@/components/LaptopCard';
 import { StatusColumn } from '@/components/StatusColumn';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { humanizeDates } from '@/lib/format';
 import { evaluateTargets, useBoard } from '@/lib/board';
 
 export function StatusBoard() {
@@ -29,7 +30,7 @@ export function StatusBoard() {
   }, []);
 
   const onFailure = useCallback((code: string, message: string) => {
-    toast.error(code, { description: message });
+    toast.error(code, { description: humanizeDates(message) });
   }, []);
 
   const board = useBoard(useMemo(() => ({ onSuccess, onFailure }), [onSuccess, onFailure]));

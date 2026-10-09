@@ -10,6 +10,7 @@ import { CheckIcon, CornerDownRightIcon, PlusIcon, XIcon } from 'lucide-react';
 import { DraggableLaptopCard } from '@/components/LaptopCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { humanizeDates } from '@/lib/format';
 import { STATUS_ACCENT } from '@/lib/statusStyles';
 import type { BoardLaptop } from '@/lib/api';
 import type { TargetVerdict } from '@/lib/board';
@@ -98,7 +99,7 @@ export function StatusColumn({
               <span className="flex items-center gap-1.5 font-medium">
                 <code className="font-mono text-[10px]">{verdict?.error?.code}</code>
               </span>
-              <p className="mt-1">{verdict?.error?.message}</p>
+              <p className="mt-1">{humanizeDates(verdict?.error?.message ?? '')}</p>
             </>
           ) : allowed ? (
             <span className="flex items-center gap-1.5 font-medium">
@@ -111,7 +112,9 @@ export function StatusColumn({
                 <XIcon className="size-3.5 shrink-0" aria-hidden />
                 <code className="font-mono text-[10px]">{verdict?.error?.code}</code>
               </span>
-              <p className="mt-1 text-rose-200/80">{verdict?.error?.message}</p>
+              <p className="mt-1 text-rose-200/80">
+                {humanizeDates(verdict?.error?.message ?? '')}
+              </p>
             </>
           )}
         </div>
