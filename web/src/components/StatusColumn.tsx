@@ -5,10 +5,11 @@ import {
   isTerminalStatus,
   type LaptopStatus,
 } from '@domain';
-import { CheckIcon, CornerDownRightIcon, XIcon } from 'lucide-react';
+import { CheckIcon, CornerDownRightIcon, PlusIcon, XIcon } from 'lucide-react';
 
 import { DraggableLaptopCard } from '@/components/LaptopCard';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { STATUS_ACCENT } from '@/lib/statusStyles';
 import type { BoardLaptop } from '@/lib/api';
 import type { TargetVerdict } from '@/lib/board';
@@ -23,6 +24,11 @@ interface StatusColumnProps {
   /** Это колонка, из которой карточку взяли. */
   readonly isSource: boolean;
   readonly onOpenHistory: (laptopId: string) => void;
+  /**
+   * Задаётся только для колонки начального статуса: новые ноутбуки приезжают
+   * на склад, и какой это статус — решает домен (INITIAL_STATUS), а не вёрстка.
+   */
+  readonly onAdd?: (() => void) | undefined;
 }
 
 export function StatusColumn({
@@ -32,6 +38,7 @@ export function StatusColumn({
   verdict,
   isSource,
   onOpenHistory,
+  onAdd,
 }: StatusColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -127,6 +134,18 @@ export function StatusColumn({
           <p className="flex flex-1 items-center justify-center text-[11px] text-muted-foreground/60">
             пусто
           </p>
+        )}
+
+        {onAdd !== undefined && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-auto h-8 w-full justify-start border border-dashed text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={onAdd}
+          >
+            <PlusIcon className="size-3.5" aria-hidden />
+            Добавить ноутбук
+          </Button>
         )}
       </div>
     </section>

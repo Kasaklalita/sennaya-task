@@ -9,7 +9,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { ALL_STATUSES, isLaptopStatus } from '@domain';
+import { ALL_STATUSES, INITIAL_STATUS, isLaptopStatus } from '@domain';
 import { Loader2Icon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -153,6 +153,8 @@ export function StatusBoard() {
               verdict={verdicts?.find((verdict) => verdict.to === status) ?? null}
               isSource={activeItem?.laptop.status === status}
               onOpenHistory={setHistoryId}
+              // Куда приезжает новый ноутбук — знает домен, не вёрстка.
+              onAdd={status === INITIAL_STATUS ? () => void board.add() : undefined}
             />
           ))}
         </div>

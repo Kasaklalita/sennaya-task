@@ -149,6 +149,24 @@ export async function moveLaptop(params: {
   };
 }
 
+/**
+ * Добавляет новый ноутбук. Название модели и идентификатор выдаёт сервер —
+ * каталог живёт рядом с таблицей, а не в интерфейсе.
+ */
+export async function addLaptop(): Promise<{ board: Board; createdId: string }> {
+  const response = await fetch('/api/laptops', { method: 'POST' });
+  const body = await readJson(response);
+
+  if (!response.ok) {
+    throw new Error(
+      (body as { error?: ApiError }).error?.message ?? 'Не удалось добавить ноутбук',
+    );
+  }
+
+  const payload = body as { board: BoardDto; createdId: string };
+  return { board: toBoard(payload.board), createdId: payload.createdId };
+}
+
 export async function resetBoard(): Promise<Board> {
   const response = await fetch('/api/reset', { method: 'POST' });
   const body = await readJson(response);

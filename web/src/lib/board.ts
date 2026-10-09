@@ -1,7 +1,14 @@
 import { ALL_STATUSES, changeStatus, type Laptop, type LaptopStatus, type TransitionError } from '@domain';
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchBoard, moveLaptop, resetBoard, type Board, type BoardLaptop } from './api';
+import {
+  addLaptop,
+  fetchBoard,
+  moveLaptop,
+  resetBoard,
+  type Board,
+  type BoardLaptop,
+} from './api';
 
 /**
  * Состояние доски.
@@ -60,6 +67,7 @@ export interface BoardController {
   readonly loading: boolean;
   readonly loadError: string | null;
   readonly move: (laptopId: string, to: LaptopStatus) => Promise<void>;
+  readonly add: () => Promise<void>;
   readonly reset: () => Promise<void>;
   readonly shiftClock: (days: number) => void;
   readonly setClock: (now: Date) => void;
@@ -133,6 +141,17 @@ export function useBoard(callbacks: BoardCallbacks): BoardController {
     [board.laptops, offsetMs, onSuccess, onFailure],
   );
 
+  const add = useCallback(async () => {
+    try {
+      const { board: next, createdId } = await addLaptop();
+      setBoard(next);
+      const created = next.laptops.find((item) => item.laptop.id === createdId);
+      onSuccess(`Приехал ${created?.model ?? createdId}`);
+    } catch (error) {
+      onFailure('NETWORK_ERROR', error instanceof Error ? error.message : String(error));
+    }
+  }, [onSuccess, onFailure]);
+
   const reset = useCallback(async () => {
     try {
       setBoard(await resetBoard());
@@ -170,6 +189,7 @@ export function useBoard(callbacks: BoardCallbacks): BoardController {
     loading,
     loadError,
     move,
+    add,
     reset,
     shiftClock,
     setClock,
