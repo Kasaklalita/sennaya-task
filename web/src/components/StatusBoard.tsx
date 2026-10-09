@@ -10,7 +10,13 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { ALL_STATUSES, INITIAL_STATUS, isLaptopStatus } from '@domain';
-import { LayoutGridIcon, Loader2Icon, ScrollTextIcon, TriangleAlertIcon } from 'lucide-react';
+import {
+  LayoutGridIcon,
+  Loader2Icon,
+  ScrollTextIcon,
+  SendIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
@@ -187,6 +193,18 @@ export function StatusBoard() {
     <Tabs defaultValue="board">
       <header className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="text-2xl font-semibold tracking-tight">Статусы ноутбука на складе</h1>
+
+        {/* rel обязателен: без него открытая вкладка получать доступ
+            к этой через window.opener. */}
+        <a
+          href="https://t.me/PolienkoVeniamin"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:underline"
+        >
+          <SendIcon className="size-3" aria-hidden />
+          Вениамин Полиенко
+        </a>
 
         <TabsList className="ml-auto">
           <TabsTrigger value="board">
