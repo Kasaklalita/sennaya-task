@@ -9,6 +9,7 @@
 export {
   ALLOWED_TRANSITIONS,
   ALL_STATUSES,
+  INITIAL_STATUS,
   LaptopStatus,
   STATUS_LABELS,
   allowedTransitionsFrom,

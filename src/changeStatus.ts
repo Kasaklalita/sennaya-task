@@ -12,6 +12,7 @@
  */
 
 import {
+  INITIAL_STATUS,
   LaptopStatus,
   allowedTransitionsFrom,
   isLaptopStatus,
@@ -336,7 +337,7 @@ export function returnDeadline(laptop: Laptop): Date | null {
 
 export interface CreateLaptopInput {
   readonly id: string;
-  /** По умолчанию «На складе» — статус нового ноутбука на складе. */
+  /** По умолчанию {@link INITIAL_STATUS} — новый ноутбук приезжает на склад. */
   readonly status?: LaptopStatus;
   readonly history?: readonly StatusChange[];
   /** Дата продажи для записей, импортированных без истории. */
@@ -350,7 +351,7 @@ export interface CreateLaptopInput {
 export function createLaptop(input: CreateLaptopInput): Laptop {
   return Object.freeze({
     id: input.id,
-    status: input.status ?? LaptopStatus.InStock,
+    status: input.status ?? INITIAL_STATUS,
     history: Object.freeze((input.history ?? []).map(cloneChange)),
     ...(input.soldAt === undefined ? {} : { soldAt: new Date(input.soldAt.getTime()) }),
   });

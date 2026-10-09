@@ -30,6 +30,16 @@ export type LaptopStatus = (typeof LaptopStatus)[keyof typeof LaptopStatus];
  */
 export const ALL_STATUSES: readonly LaptopStatus[] = Object.freeze(Object.values(LaptopStatus));
 
+/**
+ * Статус, с которого начинается жизнь ноутбука: он приезжает на склад.
+ *
+ * Значение по умолчанию в `createLaptop()` и начальная вершина автомата —
+ * одно и то же, поэтому константа экспортируется: интерфейсу нужно знать,
+ * в какой колонке появится новая карточка, и он не должен выяснять это
+ * собственным предположением.
+ */
+export const INITIAL_STATUS: LaptopStatus = LaptopStatus.InStock;
+
 /** Подписи ровно в формулировках ТЗ — попадают в тексты ошибок. */
 export const STATUS_LABELS = {
   IN_STOCK: 'На складе',
