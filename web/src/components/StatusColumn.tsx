@@ -19,15 +19,12 @@ interface StatusColumnProps {
   readonly status: LaptopStatus;
   readonly laptops: readonly BoardLaptop[];
   readonly now: Date;
-  /** Вердикт домена для перетаскиваемой карточки. `null` — ничего не тащат. */
+  /** Что домен сказать про карточку в руке. `null` — ничего не тащат. */
   readonly verdict: TargetVerdict | null;
-  /** Это колонка, из которой карточку взяли. */
+  /** Отсюда карточку взяли. */
   readonly isSource: boolean;
   readonly onOpenHistory: (laptopId: string) => void;
-  /**
-   * Задаётся только для колонки начального статуса: новые ноутбуки приезжают
-   * на склад, и какой это статус — решает домен (INITIAL_STATUS), а не вёрстка.
-   */
+  /** Только у колонки начального статуса. Какой он — решать домен, не вёрстка. */
   readonly onAdd?: (() => void) | undefined;
 }
 
@@ -72,7 +69,7 @@ export function StatusColumn({
           </Badge>
         </div>
 
-        {/* Исходящие рёбра берутся из графа домена — интерфейс их не перечисляет руками. */}
+        {/* Рёбра брать из графа домена. Интерфейс их руками не писать. */}
         <p className="mt-1.5 flex items-start gap-1 text-[11px] leading-snug text-muted-foreground">
           <CornerDownRightIcon className="mt-px size-3 shrink-0" aria-hidden />
           <span>
@@ -83,7 +80,7 @@ export function StatusColumn({
         </p>
       </header>
 
-      {/* Пока карточку тащат, каждая колонка показывает ответ домена именно по ней. */}
+      {/* Карточку тащат — каждая колонка показать ответ домена про себя. */}
       {dragging && (
         <div
           className={cn(
@@ -95,8 +92,8 @@ export function StatusColumn({
           role="status"
         >
           {isSource ? (
-            // Домен и на «ту же колонку» отвечает осмысленно — показываем его ответ,
-            // а не придуманную интерфейсом заглушку.
+            // Домен и про «ту же колонку» отвечать по делу. Показать его
+            // ответ, а не выдумку интерфейса.
             <>
               <span className="flex items-center gap-1.5 font-medium">
                 <code className="font-mono text-[10px]">{verdict?.error?.code}</code>

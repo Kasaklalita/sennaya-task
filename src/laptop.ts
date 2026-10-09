@@ -1,9 +1,8 @@
 /**
- * Агрегат «ноутбук»: как его создать, как прочитать и как дописать в журнал.
+ * Агрегат «ноутбук»: создать, прочитать, дописать в журнал.
  *
- * Здесь нет ни одного правила переходов — только операции над самим объектом.
- * Куда можно ходить, описывает граф (status.ts), при каких условиях —
- * условия на рёбрах (rules.ts), а решение принимает движок (changeStatus.ts).
+ * Правил переходов тут нет. Куда можно — status.ts, когда можно — rules.ts,
+ * решать — changeStatus.ts.
  */
 
 import { INITIAL_STATUS, LaptopStatus } from './status.js';
@@ -11,7 +10,7 @@ import { invalidSaleDate, saleDateUnknown } from './errors.js';
 import { copyDate, isValidDate } from './time.js';
 import { err, ok, type Laptop, type Result, type StatusChange, type TransitionError } from './types.js';
 
-/** Копия записи журнала с копией даты — чтобы на вход нельзя было подсунуть алиас. */
+/** Копия записи с копией даты — чтобы снаружи нельзя было подсунуть алиас. */
 function cloneChange(change: StatusChange): StatusChange {
   return Object.freeze({
     from: change.from,
@@ -22,17 +21,14 @@ function cloneChange(change: StatusChange): StatusChange {
 
 export interface CreateLaptopInput {
   readonly id: string;
-  /** По умолчанию {@link INITIAL_STATUS} — новый ноутбук приезжает на склад. */
+  /** По умолчанию {@link INITIAL_STATUS} — новый ноутбук ехать на склад. */
   readonly status?: LaptopStatus;
   readonly history?: readonly StatusChange[];
-  /** Дата продажи для записей, импортированных без истории. */
+  /** Дата продажи для записей, привезённых без истории. */
   readonly soldAt?: Date;
 }
 
-/**
- * Конструктор ноутбука: замораживает результат и копирует все даты,
- * чтобы внешние объекты не оставались алиасами внутреннего состояния.
- */
+/** Создать ноутбук: заморозить объект, скопировать все даты. */
 export function createLaptop(input: CreateLaptopInput): Laptop {
   return Object.freeze({
     id: input.id,
@@ -43,16 +39,14 @@ export function createLaptop(input: CreateLaptopInput): Laptop {
 }
 
 /**
- * Определяет дату продажи.
+ * Найти дату продажи.
  *
- * Приоритет у истории: она — единственный источник истины, и при нескольких циклах
- * «продан → возврат → продан снова» окно должно считаться от **последней** продажи.
- * Отдельное поле `soldAt` поддерживается только как запасной источник для записей,
- * импортированных из внешней системы без истории, — иначе два источника даты
- * неизбежно рассинхронизируются.
+ * История главнее. При цикле «продан → возврат → продан снова» срок считать
+ * от ПОСЛЕДНЕЙ продажи. Поле `soldAt` — только запас для записей без истории:
+ * два равноправных источника одной даты неизбежно разъехаться.
  *
- * Если даты нет нигде — возвращается ошибка, а не «молчаливое разрешить/запретить»:
- * невозможность проверить правило это не то же самое, что нарушение правила.
+ * Даты нет нигде — вернуть ошибку, не угадывать. «Проверить нельзя» и
+ * «правило нарушено» — разные вещи.
  */
 export function resolveSaleDate(laptop: Laptop): Result<Date, TransitionError> {
   const lastSale = laptop.history.findLast((change) => change.to === LaptopStatus.Sold);
@@ -71,10 +65,10 @@ export function resolveSaleDate(laptop: Laptop): Result<Date, TransitionError> {
 }
 
 /**
- * Дописывает запись в журнал и возвращает новый агрегат.
+ * Дописать запись и вернуть новый агрегат.
  *
- * Вызывается только движком и только после того, как переход уже разрешён:
- * сама функция ничего не проверяет.
+ * Зовёт только движок и только после того, как переход уже разрешён:
+ * сама функция ничего не проверять.
  */
 export function appendChange(
   laptop: Laptop,
@@ -85,8 +79,7 @@ export function appendChange(
   const change: StatusChange = Object.freeze({
     from,
     to,
-    // Копия: если вызывающий потом поменяет переданный ему объект даты,
-    // запись в журнале не должна «поехать».
+    // Копия: вызывающий потом поменять свой объект даты — журнал не поехать.
     at: copyDate(at),
   });
 

@@ -21,14 +21,14 @@ import {
 import { buildSeed } from './seed.js';
 
 /**
- * HTTP-слой.
+ * Обработчики запросов.
  *
- * Решение о том, можно ли переход, принимает **домен** — тот же модуль, что
- * работает в браузере и покрыт тестами. Здесь только три вещи: разобрать запрос,
- * сохранить результат и перевести ответ домена в код HTTP.
+ * Решать, можно переход или нет, — дело **домена**. Того же модуля, что
+ * крутиться в браузере и покрыт тестами. Тут только три вещи: разобрать
+ * запрос, сохранить результат, перевести ответ в код HTTP.
  */
 
-// Ответ обработчика до того, как его записали в сокет.
+// Ответ обработчика, пока его не записали в сокет.
 export interface ApiResponse {
   readonly status: number;
   readonly body: unknown;
@@ -67,9 +67,9 @@ function parseTransitionRequest(body: unknown): ParseResult {
     };
   }
 
-  // Клиент может задать «сейчас» — это осознанная поблажка демонстрации:
-  // окно возврата иначе не показать. В реальной системе сервер использовал бы
-  // только свои часы, потому что клиентскому времени доверять нельзя.
+  // Клиент может задать «сейчас». Это поблажка демо: окно возврата иначе
+  // не показать. В настоящей системе сервер брать только свои часы —
+  // времени клиента верить нельзя.
   const rawNow = raw['now'];
   let now = new Date();
   if (rawNow !== undefined && rawNow !== null) {
@@ -97,19 +97,18 @@ function parseTransitionRequest(body: unknown): ParseResult {
   };
 }
 
-// DTO и таблица кодов живут в dto.ts; реэкспорт — чтобы у потребителей
-// была одна точка входа в серверный API.
+// DTO и таблица кодов лежать в dto.ts. Реэкспорт — чтобы вход был один.
 export { httpStatusFor } from './dto.js';
 export type { AttemptDto, BoardDto, LaptopDto, StatusChangeDto } from './dto.js';
 
 // --- Обработчики ---
 
 /**
- * Проверка живости для платформы.
+ * «Я жив?» для платформы.
  *
- * Делает тривиальный запрос к базе, а не просто возвращает 200: сервис,
- * который отвечает «жив» при недоступной базе, бесполезен — балансировщик
- * продолжит слать на него трафик.
+ * Делать пустяковый запрос в базу, а не просто отвечать 200. Сервис, который
+ * кричать «жив» при мёртвой базе, вреднее молчащего: балансировщик продолжить
+ * слать на него трафик.
  */
 export function getHealth(db: DatabaseSync): ApiResponse {
   try {
@@ -149,11 +148,11 @@ export function postTransition(db: DatabaseSync, laptopId: string, body: unknown
     };
   }
 
-  // Решение принимает домен. Сервер его не перепроверяет и не дополняет.
+  // Решать домен. Сервер не перепроверять и не дополнять.
   const decision = changeStatus(record.laptop, to, { now });
 
   if (!decision.ok) {
-    // Отказ тоже пишется в аудит — это самое интересное в журнале попыток.
+    // Отказ тоже писать в аудит — он в журнале самое интересное.
     inTransaction(db, () => {
       recordAttempt(db, {
         laptopId,
@@ -168,8 +167,7 @@ export function postTransition(db: DatabaseSync, laptopId: string, body: unknown
 
     return {
       status: httpStatusFor(decision.error),
-      // Доска возвращается и при отказе: клиент остаётся в синхронном состоянии,
-      // не делая второй запрос.
+      // Доску вернуть и при отказе: клиент остаться в синхроне без второго запроса.
       body: { error: decision.error, board: readBoard(db) },
     };
   }
@@ -221,19 +219,18 @@ export function postTransition(db: DatabaseSync, laptopId: string, body: unknown
 }
 
 /**
- * Добавляет новый ноутбук.
+ * Добавить ноутбук.
  *
- * Статус не выбирается здесь: его задаёт домен через `createLaptop()`, который
- * по умолчанию ставит {@link INITIAL_STATUS}. Сервер приносит только то, чего
- * домен не знает, — идентификатор и название модели.
+ * Статус тут не выбирать: его ставить домен через `createLaptop()`.
+ * Сервер приносить только то, чего домен не знать: номер и название.
  */
 export function postLaptop(
   db: DatabaseSync,
   random: () => number = Math.random,
 ): ApiResponse {
   const created = inTransaction(db, () => {
-    // Номер и вставка — в одной транзакции, иначе два одновременных
-    // добавления могли бы получить одинаковый идентификатор.
+    // Номер и вставка в одной транзакции: иначе два нажатия подряд
+    // получить один и тот же номер.
     const id = nextLaptopId(db);
     const laptop = createLaptop({ id });
     insertLaptop(db, { laptop, model: randomModelName(random) });
@@ -249,7 +246,7 @@ export function postReset(db: DatabaseSync, now: Date = new Date()): ApiResponse
   return { status: 200, body: { board: readBoard(db) } };
 }
 
-/** Наполняет пустую базу. Если ноутбуки уже есть — ничего не делает. */
+/** Наполнить пустую базу. Ноутбуки уже есть — ничего не делать. */
 export function seedDatabase(db: DatabaseSync, now: Date = new Date()): void {
   const existing = db.prepare('SELECT count(*) AS count FROM laptops').get() as
     | { count: number }

@@ -3,10 +3,10 @@ import { createLaptop, type Laptop, type LaptopStatus } from '@domain';
 /**
  * Клиент API.
  *
- * Здесь проходит граница сети: по проводу ходят DTO с датами-строками, а внутрь
- * приложения попадают уже доменные агрегаты. Сборка идёт через `createLaptop`
- * из домена — тот же конструктор, что использует сервер, поэтому объект
- * в браузере получает те же гарантии: он заморожен, даты скопированы.
+ * Тут проходить граница сети: по проводу ходить DTO с датами-строками, внутрь
+ * попадать доменный агрегат. Собирать через `createLaptop` — тот же
+ * конструктор, что у сервера. Значит объект в браузере получить те же
+ * гарантии: заморожен, даты скопированы.
  */
 
 export interface AttemptView {
@@ -20,7 +20,7 @@ export interface AttemptView {
   readonly modelNow: Date;
 }
 
-/** Агрегат плюс то, чего домен не знает: каталожное имя и версия строки. */
+/** Агрегат плюс то, чего домен не знать: имя из каталога и версия строки. */
 export interface BoardLaptop {
   readonly laptop: Laptop;
   readonly model: string;
@@ -143,16 +143,12 @@ export async function moveLaptop(params: {
   return {
     ok: false,
     error: body.error ?? { code: 'UNKNOWN', message: `Сервер ответил ${response.status}` },
-    // Доска приходит и вместе с отказом — клиенту не нужен второй запрос,
-    // чтобы увидеть актуальное состояние.
+    // Доска приходить и с отказом: второй запрос не нужен.
     board: body.board === undefined ? null : toBoard(body.board),
   };
 }
 
-/**
- * Добавляет новый ноутбук. Название модели и идентификатор выдаёт сервер —
- * каталог живёт рядом с таблицей, а не в интерфейсе.
- */
+/** Добавить ноутбук. Номер и название давать сервер: каталог жить рядом с таблицей. */
 export async function addLaptop(): Promise<{ board: Board; createdId: string }> {
   const response = await fetch('/api/laptops', { method: 'POST' });
   const body = await readJson(response);

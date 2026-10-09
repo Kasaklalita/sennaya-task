@@ -18,7 +18,7 @@
     "skipLibCheck": true,
     "noEmit": true,
 
-    /* В TypeScript 7 baseUrl удалён: paths резолвятся относительно этого файла. */
+    /* В TypeScript 7 baseUrl выкинут: paths считать от этого файла. */
     "paths": {
       "@/*": ["./web/src/*"],
       "@domain": ["./src/index.ts"]

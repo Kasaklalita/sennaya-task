@@ -11,12 +11,12 @@ import {
 } from './api.js';
 import { serveStatic } from './static.js';
 
-/** Защита от бесконечного тела запроса. Доска маленькая, мегабайт не бывает. */
+/** Тело не может быть бесконечным. Доска маленькая, мегабайт не бывать. */
 const MAX_BODY_BYTES = 64 * 1024;
 
 /**
- * Ошибка клиента, а не сбой сервера: битый JSON или слишком большое тело.
- * Отдельный тип нужен, чтобы такие случаи не превращались в 500.
+ * Виноват клиент, не сервер: битый JSON или огромное тело.
+ * Отдельный тип нужен, чтобы такое не уезжало в 500.
  */
 class ClientError extends Error {
   readonly status: number;
@@ -39,7 +39,7 @@ function tooLarge(): ClientError {
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
-  // Сначала по заголовку: отказать до чтения дешевле, чем после.
+  // Сперва по заголовку: отказать до чтения дешевле, чем после.
   const declaredSize = Number(request.headers['content-length'] ?? 0);
   if (Number.isFinite(declaredSize) && declaredSize > MAX_BODY_BYTES) {
     throw tooLarge();
@@ -48,7 +48,7 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
 
-  // Страховка для запросов без content-length (chunked transfer-encoding).
+  // Страховка для запросов без content-length (chunked).
   for await (const chunk of request) {
     const buffer = chunk as Buffer;
     size += buffer.length;
@@ -82,10 +82,7 @@ function send(response: ServerResponse, { status, body }: ApiResponse): void {
 const TRANSITION_ROUTE = /^\/api\/laptops\/([^/]+)\/status$/;
 
 export interface ServerOptions {
-  /**
-   * Каталог с собранным фронтендом. Не задан — сервер отдаёт только API,
-   * а статику в разработке раздаёт Vite.
-   */
+  /** Где лежать собранный фронт. Не задан — сервер только API, статику дать Vite. */
   readonly staticRoot?: string | undefined;
 }
 
@@ -134,7 +131,7 @@ export async function handleRequest(
       return;
     }
 
-    // Не API — значит либо файл фронтенда, либо и правда ничего.
+    // Не API — значит либо файл фронта, либо правда ничего.
     if (options.staticRoot !== undefined && !path.startsWith('/api/')) {
       if (await serveStatic(options.staticRoot, request, response, path)) {
         return;
@@ -146,9 +143,8 @@ export async function handleRequest(
       body: { error: { code: 'NOT_FOUND', message: `Маршрут ${method} ${path} не найден.` } },
     });
   } catch (error) {
-    // Остаток тела нужно дочитать и выбросить: если этого не сделать, клиент
-    // продолжит писать в сокет, а соединение повиснет. Рвать его нельзя —
-    // ответ ещё не ушёл.
+    // Остаток тела дочитать и выбросить. Иначе клиент продолжать писать
+    // в сокет и соединение повиснуть. Рвать нельзя — ответ ещё не ушёл.
     request.resume();
 
     if (error instanceof ClientError) {
@@ -159,9 +155,8 @@ export async function handleRequest(
       return;
     }
 
-    // Сюда попадают только настоящие сбои — например повреждённые данные в БД.
-    // Отказы бизнес-правил исключениями не являются: они приходят из домена
-    // как значение и обрабатываются выше.
+    // Сюда падать только настоящие сбои — например битые данные в БД.
+    // Отказ бизнес-правила не исключение: он прийти из домена значением.
     const message = error instanceof Error ? error.message : String(error);
     send(response, {
       status: 500,

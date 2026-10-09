@@ -1,14 +1,12 @@
 /**
  * Проверки уровня типов.
  *
- * Эти утверждения проверяет **компилятор**, а не Vitest: они срабатывают
- * на `npm run typecheck` (`tsc --noEmit` включает папку `tests`). Каждый
- * `@ts-expect-error` — такой же тест, как `expect(...)`: если на строке ниже
- * ошибки компиляции НЕ будет, сборка упадёт на «неиспользованной директиве».
+ * Их проверять **компилятор**, не Vitest: срабатывать на `npm run typecheck`.
+ * Каждый `@ts-expect-error` — такой же тест, как `expect(...)`: если ошибки
+ * компиляции НЕ случиться, сборка упасть на «неиспользованной директиве».
  *
- * Зачем это нужно, если есть рантайм-проверки: граф переходов один и тот же,
- * но ловить ошибку дешевле всего до запуска. Там, где статус известен типу как
- * литерал, компилятор не даст даже написать невозможный переход.
+ * Зачем, если есть проверка в рантайме: граф тот же, но поймать ошибку
+ * дешевле всего ДО запуска.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -25,7 +23,7 @@ import {
   type TransitionError,
 } from '../src/index.js';
 
-/** Строгое сравнение типов (а не взаимная присваиваемость). */
+/** Строгое равенство типов, не взаимная присваиваемость. */
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
@@ -41,10 +39,10 @@ export type AssertReservedTargets = Expect<
 >;
 export type AssertSoldTargets = Expect<Equals<AllowedTarget<'SOLD'>, 'IN_STOCK'>>;
 
-/** Терминальность «Списан» доказана типами: из него нет ни одного перехода. */
+/** Тупик «Списан» доказан типом: переходов из него нет. */
 export type AssertWrittenOffIsDeadEnd = Expect<Equals<AllowedTarget<'WRITTEN_OFF'>, never>>;
 
-/** Множество конечных статусов вычислено из графа, а не перечислено руками. */
+/** Конечные статусы считаны из графа, не перечислены руками. */
 export type AssertTerminalStatus = Expect<Equals<TerminalStatus, 'WRITTEN_OFF'>>;
 
 // --- Фикстуры с литеральным статусом ---
@@ -72,11 +70,10 @@ const LAPTOP: Laptop = createLaptop({ id: 'nb-typed' });
 // --- Что компилятор обязан запретить ---
 
 /**
- * Тело этой функции существует только для компилятора — она никогда не вызывается.
+ * Тело этой функции только для компилятора — её никогда не звать.
  *
- * Так и должно быть: часть строк ниже это не просто ошибки типов, а ещё и операции,
- * которые в рантайме честно бросят `TypeError` (объекты заморожены). Проверять их
- * нужно на этапе компиляции, а не исполнять.
+ * Так и надо: часть строк ниже это не только ошибки типов, но и операции,
+ * которые в рантайме честно бросить `TypeError` — объекты заморожены.
  */
 export function compileTimeOnlyAssertions(): void {
   // Возврат из «Продан» — единственный допустимый переход, он проходит:
@@ -117,9 +114,8 @@ export function compileTimeOnlyAssertions(): void {
 }
 
 /**
- * Исчерпывающий разбор ошибок: `default` присваивает `error` в `never`.
- * Если в `TransitionError` появится новый вариант, а здесь его не обработают,
- * сборка упадёт — ни один код ошибки нельзя «потерять» молча.
+ * Полный разбор ошибок: `default` класть `error` в `never`. Появится новый
+ * вариант и его тут забудут — сборка упасть. Код ошибки молча не потерять.
  */
 function describeError(error: TransitionError): string {
   switch (error.code) {
@@ -146,19 +142,19 @@ function describeError(error: TransitionError): string {
 
 describe('проверки уровня типов', () => {
   it('выполняются компилятором на npm run typecheck', () => {
-    // Рантайм-подтверждение того же факта, что доказан типами выше.
+    // Рантайм подтвердить то же, что типы доказали выше.
     expect(ALLOWED_TRANSITIONS.WRITTEN_OFF).toEqual([]);
     expect(ALLOWED_TRANSITIONS.SOLD).toEqual(['IN_STOCK']);
   });
 
   it('changeStatusStrict в рантайме делегирует в changeStatus', () => {
-    // Со часами, переданными явно.
+    // С часами, переданными явно.
     const returned = changeStatusStrict(SOLD_LAPTOP, 'IN_STOCK', {
       now: new Date('2026-01-19T10:00:00.000Z'),
     });
     expect(returned.ok).toBe(true);
 
-    // И без options — результат этого перехода от времени не зависит.
+    // И без options: этот переход от времени не зависеть.
     const reserved = changeStatusStrict(IN_STOCK_LAPTOP, 'RESERVED');
     expect(reserved.ok).toBe(true);
     if (!reserved.ok) {

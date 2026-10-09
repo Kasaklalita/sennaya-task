@@ -13,17 +13,17 @@ interface LaptopCardBodyProps {
   readonly item: BoardLaptop;
   readonly now: Date;
   readonly onOpenHistory?: (laptopId: string) => void;
-  /** Карточка отрисована в слое перетаскивания — поднимаем её визуально. */
+  /** Карточка «в руке» — поднять её визуально. */
   readonly floating?: boolean;
-  /** Оригинал карточки, пока её копию тащат. */
+  /** Оригинал, пока копию тащат. */
   readonly ghost?: boolean;
 }
 
 /**
- * Визуальная часть карточки.
+ * Как карточка выглядеть.
  *
- * Вынесена отдельно от перетаскиваемой обёртки, потому что ровно эту разметку
- * отрисовывает `DragOverlay` — чтобы карточка «в руке» выглядела так же, как на доске.
+ * Отдельно от обёртки перетаскивания: ровно эту разметку рисовать DragOverlay,
+ * чтобы карточка «в руке» выглядеть так же, как на доске.
  */
 export function LaptopCardBody({
   item,
@@ -35,7 +35,7 @@ export function LaptopCardBody({
   const { laptop, model } = item;
   const accent = STATUS_ACCENT[laptop.status];
 
-  // Всё, что карточка знает про правила, она узнаёт у домена:
+  // Всё про правила карточка спрашивать у домена:
   const deadline = returnDeadline(laptop);
   const isDeadEnd = availableTransitions(laptop, { now }).length === 0;
 
@@ -104,7 +104,7 @@ export function LaptopCardBody({
           variant="ghost"
           size="sm"
           className="mt-2 h-7 w-full justify-start px-2 text-[11px] text-muted-foreground"
-          // Перетаскивание не должно начинаться с кнопки истории.
+          // Тащить с кнопки «история» не начинать.
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onOpenHistory(laptop.id)}
         >
@@ -122,7 +122,7 @@ interface DraggableLaptopCardProps {
   readonly onOpenHistory: (laptopId: string) => void;
 }
 
-/** Карточка на доске: та же разметка плюс обвязка перетаскивания. */
+/** Карточка на доске: та же разметка плюс обвязка таскания. */
 export function DraggableLaptopCard({ item, now, onOpenHistory }: DraggableLaptopCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: item.laptop.id });
 

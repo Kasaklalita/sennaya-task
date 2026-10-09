@@ -85,10 +85,7 @@ describe('инварианты на уровне СУБД', () => {
     inTransaction(context.db, () => insertLaptop(context.db, { laptop: sold('nb-1'), model: 'A' }));
   });
 
-  /**
-   * Журнал append-only не только в домене, но и в базе: переписать историю
-   * нельзя даже запросом в обход приложения.
-   */
+  /** Журнал только дописывать не только в домене, но и в базе. */
   it('запись журнала невозможно изменить', () => {
     expect(() =>
       context.db.prepare("UPDATE status_history SET to_status = 'WRITTEN_OFF'").run(),
@@ -156,10 +153,9 @@ describe('повреждённые данные в хранилище', () => {
   });
 
   /**
-   * Такие строки приложение создать не может — только внешнее вмешательство
-   * или неудачная миграция. Репозиторий обязан падать громко, а не отдавать
-   * домену мусор: NaN-дата, просочившаяся в автомат, молча разрешила бы возврат
-   * (см. соответствующий разбор в README).
+   * Такие строки приложение создать не может — только чужое вмешательство или
+   * кривая миграция. Репозиторий обязан падать громко, а не отдавать домену
+   * мусор: NaN-дата в автомате молча разрешить возврат.
    */
   it('нечитаемая дата в журнале', () => {
     context.db.prepare(
@@ -177,8 +173,8 @@ describe('повреждённые данные в хранилище', () => {
   });
 
   it('не строка в названии модели', () => {
-    // Именно BLOB: у колонки TEXT-аффинность, поэтому число SQLite молча
-    // привёл бы к строке, а BLOB оставляет как есть.
+    // Именно BLOB: у колонки TEXT-аффинность, число SQLite молча привести
+    // к строке, а BLOB оставить как есть.
     context.db.prepare("UPDATE laptops SET model = x'616263' WHERE id = 'nb-1'").run();
 
     expect(() => getLaptop(context.db, 'nb-1')).toThrow(/laptops\.model/);
@@ -191,8 +187,8 @@ describe('повреждённые данные в хранилище', () => {
   });
 
   it('статус вне перечисления, если ограничение СУБД обойдено', () => {
-    // PRAGMA позволяет сымитировать то, что иначе защищено CHECK: строку,
-    // попавшую в базу мимо приложения.
+    // PRAGMA дать изобразить то, что иначе закрыть CHECK: строку, попавшую
+    // в базу мимо приложения.
     context.db.exec('PRAGMA ignore_check_constraints = ON');
     context.db.prepare("UPDATE laptops SET status = 'СЛОМАН' WHERE id = 'nb-1'").run();
 
@@ -265,14 +261,11 @@ describe('оптимистическая блокировка', () => {
     expect(reloaded?.laptop.history).toHaveLength(1);
   });
 
-  /**
-   * Сценарий двух вкладок: обе прочитали версию 1, обе шлют изменение.
-   * Второе не должно молча затереть первое.
-   */
+  /** Две вкладки прочитали версию 1 и обе шлют изменение. Второе не должно затереть первое. */
   it('устаревшая версия не затирает чужое изменение', () => {
     const stale = getLaptop(context.db, 'nb-1')!;
 
-    // Первая вкладка успевает.
+    // Первая вкладка успеть.
     const first = changeStatusOrThrow(stale.laptop, LaptopStatus.Reserved, { now: SALE_DATE });
     inTransaction(context.db, () =>
       applyTransition(context.db, {
@@ -283,7 +276,7 @@ describe('оптимистическая блокировка', () => {
       }),
     );
 
-    // Вторая всё ещё думает, что версия 1.
+    // Вторая всё ещё думать, что версия 1.
     const second = changeStatusOrThrow(stale.laptop, LaptopStatus.Sold, { now: SALE_DATE });
     const applied = inTransaction(context.db, () =>
       applyTransition(context.db, {
@@ -299,7 +292,7 @@ describe('оптимистическая блокировка', () => {
     const reloaded = getLaptop(context.db, 'nb-1');
     expect(reloaded?.laptop.status).toBe('RESERVED');
     expect(reloaded?.version).toBe(2);
-    // И в журнал ничего лишнего не дописалось.
+    // И в журнал лишнего не дописаться.
     expect(reloaded?.laptop.history).toHaveLength(1);
   });
 });
@@ -347,10 +340,7 @@ describe('аудит попыток', () => {
 });
 
 describe('непригодный путь к базе', () => {
-  /**
-   * Самый вероятный сбой при деплое: том примонтирован не туда или без прав.
-   * Голый ENOTDIR/EACCES об этом не рассказывает, а подсказка — рассказывает.
-   */
+  /** Частый сбой деплоя: том не туда или без прав. Голый ENOTDIR молчать, подсказка — нет. */
   it('объясняет, что делать, вместо системного кода ошибки', () => {
     const directory = mkdtempSync(join(tmpdir(), 'laptop-badpath-'));
     const file = join(directory, 'это-файл');
@@ -377,7 +367,7 @@ describe('данные переживают перезапуск процесс�
     rmSync(directory, { recursive: true, force: true });
   });
 
-  /** Ровно то, ради чего заводилась база: перезагрузка страницы ничего не теряет. */
+  /** Ровно то, ради чего база и заводилась: перезагрузка ничего не терять. */
   it('ноутбуки, история и аудит читаются после повторного открытия файла', () => {
     const first = openDatabase(file);
     seedDatabase(first, SALE_DATE);
@@ -415,7 +405,7 @@ describe('данные переживают перезапуск процесс�
     expect(reloaded?.version).toBe(2);
     expect(listAttempts(second)).toHaveLength(1);
 
-    // Повторный сид на непустой базе ничего не ломает и не дублирует.
+    // Повторный сид на непустой базе ничего не ломать и не дублировать.
     seedDatabase(second, SALE_DATE);
     expect(listLaptops(second)).toHaveLength(6);
 

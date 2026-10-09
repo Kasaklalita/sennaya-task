@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 
 const projectRoot = import.meta.dirname;
 
-/** API живёт отдельным процессом; фронт ходит в него через прокси, без CORS. */
+/** API жить отдельным процессом. Фронт ходить к нему через прокси, без CORS. */
 const API_PROXY = {
   target: `http://localhost:${process.env['API_PORT'] ?? 5055}`,
   changeOrigin: true,
@@ -18,14 +18,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(projectRoot, 'web/src'),
-      // Домен подключается напрямую из исходников: правила автомата существуют
-      // в одном месте, фронтенд их не копирует и не знает о них ничего,
-      // кроме того, что сам домен о себе рассказывает.
+      // Домен брать прямо из исходников. Правила жить в одном месте, фронт
+      // их не копировать и знать только то, что домен сам рассказать.
       '@domain': path.resolve(projectRoot, 'src/index.ts'),
     },
   },
   server: {
-    // Домен лежит выше корня Vite — разрешаем его читать.
+    // Домен лежать выше корня Vite — разрешить его читать.
     fs: { allow: [projectRoot] },
     proxy: { '/api': API_PROXY },
   },

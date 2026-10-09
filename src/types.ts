@@ -1,9 +1,9 @@
 import type { LaptopStatus } from './status.js';
 
 /**
- * Запись журнала изменений. ТЗ требует ровно три поля: какой статус был,
- * какой стал и дата. Сознательно не добавляю `actor`/`reason`/`id` — это было бы
- * домысливанием требований; расширить структуру дешевле, чем потом убирать лишнее.
+ * Запись журнала. ТЗ просить ровно три поля: был, стал, дата.
+ * `actor`/`reason` НЕ добавлять — это домысел. Дописать потом дешевле,
+ * чем убирать лишнее.
  */
 export interface StatusChange {
   /** Статус до изменения. */
@@ -15,40 +15,35 @@ export interface StatusChange {
 }
 
 /**
- * Ноутбук как агрегат: текущий статус + журнал. Журнал append-only, записи
- * смыкаются в цепочку (`history[i].to === history[i + 1].from`), а `history`
- * последней записи согласован с `status`.
+ * Ноутбук: статус сейчас + журнал. Журнал только дописывать. Записи смыкаться
+ * в цепь (`history[i].to === history[i+1].from`), последняя сходиться со `status`.
  */
 export interface Laptop {
   readonly id: string;
   readonly status: LaptopStatus;
   /** Журнал изменений в хронологическом порядке. */
   readonly history: readonly StatusChange[];
-  /**
-   * Запасной источник даты продажи — для записей, импортированных из внешней
-   * системы без истории. Приоритет всегда у истории, см. `resolveSaleDate()`.
-   */
+  /** Запас на случай записи без истории. История всегда главнее. */
   readonly soldAt?: Date;
 }
 
 /**
- * Результат операции, в котором ошибка — часть типа.
+ * Результат, где ошибка — часть типа.
  *
- * Выбран вместо исключения потому, что ТЗ говорит буквально «возвращает понятную
- * ошибку», и потому что при `Result` компилятор не даст обратиться к `value`,
- * не проверив `ok`: забыть обработать ошибку невозможно. Для вызывающего кода,
- * которому удобнее исключение, есть `changeStatusOrThrow()`.
+ * Не исключение, потому что ТЗ буквально сказать «возвращает ошибку». И потому
+ * что компилятор не дать взять `value`, пока не проверил `ok`: забыть обработать
+ * ошибку нельзя. Кому удобнее бросок — есть changeStatusOrThrow().
  */
 export type Result<T, E> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: E };
 
-/** Удачный результат. Конструкторы живут рядом с типом, а не в каждом модуле. */
+/** Удача. Конструкторы лежать рядом с типом, а не в каждом модуле. */
 export function ok<T>(value: T): Result<T, never> {
   return { ok: true, value };
 }
 
-/** Неудачный результат. */
+/** Неудача. */
 export function err<E>(error: E): Result<never, E> {
   return { ok: false, error };
 }
@@ -56,43 +51,43 @@ export function err<E>(error: E): Result<never, E> {
 /** Параметры смены статуса. */
 export interface ChangeStatusOptions {
   /**
-   * Текущий момент. По умолчанию `new Date()`.
+   * Сейчас. По умолчанию `new Date()`.
    *
-   * Часы инжектируются, чтобы правило «14 дней» можно было проверить точно,
-   * не подменяя глобальный таймер и не делая тесты зависимыми от реального времени.
+   * Часы передавать снаружи, чтобы правило «14 дней» проверять точно —
+   * без подмены глобального таймера и без зависимости от реального времени.
    */
   readonly now?: Date;
 }
 
-/** Машинные коды ошибок — стабильный контракт для логов, UI и API. */
+/** Коды ошибок. Стабильный контракт для лога, UI и API. */
 export const TransitionErrorCode = {
-  /** Значение статуса не входит в перечисление (пришло извне). */
+  /** Статус не из перечисления — прийти извне. */
   UnknownStatus: 'UNKNOWN_STATUS',
-  /** Невалидная дата или «сейчас» раньше даты продажи. */
+  /** Битая дата или «сейчас» раньше продажи. */
   InvalidDate: 'INVALID_DATE',
-  /** Переход в тот же самый статус. */
+  /** Переход в тот же статус. */
   SameStatus: 'SAME_STATUS',
-  /** Попытка уйти из конечного статуса. */
+  /** Уход из конечного статуса. */
   TerminalStatus: 'TERMINAL_STATUS',
-  /** Такого ребра нет в графе переходов. */
+  /** Ребра в графе нет. */
   TransitionNotAllowed: 'TRANSITION_NOT_ALLOWED',
-  /** Возврат запрошен, но дату продажи определить не удалось. */
+  /** Возврат просят, а дату продажи не найти. */
   SaleDateUnknown: 'SALE_DATE_UNKNOWN',
-  /** Возврат запрошен позже допустимого срока. */
+  /** Возврат просят позже срока. */
   ReturnWindowExpired: 'RETURN_WINDOW_EXPIRED',
 } as const;
 
 export type TransitionErrorCode = (typeof TransitionErrorCode)[keyof typeof TransitionErrorCode];
 
 interface TransitionErrorBase<C extends TransitionErrorCode> {
-  /** Машинный код: по нему ветвится вызывающий код. */
+  /** Код для машины: по нему ветвиться вызывающий. */
   readonly code: C;
-  /** Готовое сообщение на русском: его можно показать пользователю или положить в лог. */
+  /** Готовый русский текст: показать человеку или положить в лог. */
   readonly message: string;
 }
 
 export interface UnknownStatusError extends TransitionErrorBase<'UNKNOWN_STATUS'> {
-  /** Где именно встретилось плохое значение. */
+  /** Где нашли плохое значение. */
   readonly field: 'laptop.status' | 'to';
   readonly received: unknown;
   readonly allowedValues: readonly LaptopStatus[];
@@ -115,7 +110,7 @@ export interface TerminalStatusError extends TransitionErrorBase<'TERMINAL_STATU
 export interface TransitionNotAllowedError extends TransitionErrorBase<'TRANSITION_NOT_ALLOWED'> {
   readonly from: LaptopStatus;
   readonly to: LaptopStatus;
-  /** Что было можно вместо этого — чтобы вызывающий мог показать варианты. */
+  /** Что было можно вместо — чтобы показать варианты. */
   readonly allowed: readonly LaptopStatus[];
 }
 
@@ -124,18 +119,18 @@ export type SaleDateUnknownError = TransitionErrorBase<'SALE_DATE_UNKNOWN'>;
 export interface ReturnWindowExpiredError extends TransitionErrorBase<'RETURN_WINDOW_EXPIRED'> {
   readonly soldAt: Date;
   readonly now: Date;
-  /** Последний момент, когда возврат был возможен (включительно). */
+  /** Последний момент, когда возврат был можно (включительно). */
   readonly deadline: Date;
   readonly windowDays: number;
   readonly msElapsed: number;
-  /** Прошло суток с момента продажи; дробное — округление остаётся за UI. */
+  /** Суток с продажи. Дробное — округлять дело UI. */
   readonly daysElapsed: number;
 }
 
 /**
- * Все возможные ошибки перехода. Дискриминированное объединение: `switch (error.code)`
- * проверяется компилятором на исчерпывающесть, новый код ошибки сломает сборку
- * в каждом месте, где его забыли обработать.
+ * Все ошибки перехода. Дискриминированное объединение: `switch (error.code)`
+ * компилятор проверять на полноту. Новый код ошибки сломать сборку везде,
+ * где его забыли обработать.
  */
 export type TransitionError =
   | UnknownStatusError

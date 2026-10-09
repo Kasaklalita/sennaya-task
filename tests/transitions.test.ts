@@ -20,12 +20,10 @@ import {
 import { SALE_DATE, after, days, inStock, reserved, sold, writtenOff } from './helpers.js';
 
 /**
- * Таблица ожиданий переписана руками прямо из ТЗ и НЕ выводится из
- * `ALLOWED_TRANSITIONS`.
+ * Таблица ожиданий написана РУКАМИ прямо из ТЗ, не выведена из графа.
  *
- * Это принципиально: тест, построенный на том же графе, что и проверяемый код,
- * не поймал бы ошибку в самом графе — он бы её добросовестно повторил. Здесь же
- * расхождение между ТЗ и реализацией сразу роняет сборку.
+ * Это главное. Тест на том же графе, что и код, ошибку в графе не поймать —
+ * он её повторить. А так расхождение ТЗ и кода сразу ронять сборку.
  */
 const EXPECTED_ALLOWED: Record<LaptopStatus, Record<LaptopStatus, boolean>> = {
   // ТЗ: «На складе → Бронь, Продан, Списан»
@@ -38,7 +36,7 @@ const EXPECTED_ALLOWED: Record<LaptopStatus, Record<LaptopStatus, boolean>> = {
   WRITTEN_OFF: { IN_STOCK: false, RESERVED: false, SOLD: false, WRITTEN_OFF: false },
 };
 
-/** Какую именно ошибку обязан увидеть пользователь — тоже выведено из ТЗ, не из кода. */
+/** Какую ошибку увидеть человек — тоже из ТЗ, не из кода. */
 function expectedErrorCode(from: LaptopStatus, to: LaptopStatus): string {
   if (from === to) {
     return 'SAME_STATUS';
@@ -56,7 +54,7 @@ const FIXTURES: Record<LaptopStatus, () => Laptop> = {
   WRITTEN_OFF: writtenOff,
 };
 
-/** «Сейчас» внутри окна возврата: матрица проверяет структуру графа, а не сроки. */
+/** «Сейчас» внутри окна: матрица про структуру графа, не про сроки. */
 const NOW_WITHIN_WINDOW = after(SALE_DATE, days(1));
 
 const ALL_PAIRS: ReadonlyArray<[LaptopStatus, LaptopStatus]> = ALL_STATUSES.flatMap((from) =>

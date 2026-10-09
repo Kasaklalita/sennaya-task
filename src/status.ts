@@ -1,46 +1,36 @@
 /**
- * Статусы ноутбука и граф допустимых переходов.
+ * Статусы и граф переходов.
  *
- * `ALLOWED_TRANSITIONS` — единственный источник истины об автомате: из него выводятся
- * и рантайм-проверки, и типы уровня компиляции. Поэтому граф физически невозможно
- * рассинхронизировать с валидацией: добавили ребро в объект — изменились и проверки,
- * и типы, и список доступных переходов в UI.
+ * ALLOWED_TRANSITIONS — один источник истины. Из него расти и проверка
+ * в рантайм, и тип. Два места рассинхронить нельзя: место одно.
  */
 
-/**
- * Статусы из ТЗ. Значения — стабильные машинные ключи (их не стыдно хранить в БД
- * и отдавать по API), человекочитаемые подписи лежат в {@link STATUS_LABELS}.
- */
+/** Статусы из ТЗ. Значение — машинный ключ, подпись для человек в STATUS_LABELS. */
 export const LaptopStatus = {
-  /** «На складе» — ноутбук доступен к продаже или брони. */
+  /** «На складе» — можно продать или забронировать. */
   InStock: 'IN_STOCK',
-  /** «Бронь» — отложен под покупателя. */
+  /** «Бронь» — отложен под покупатель. */
   Reserved: 'RESERVED',
-  /** «Продан» — из этого статуса возможен возврат в течение окна возврата. */
+  /** «Продан» — отсюда возможен возврат, пока срок не вышел. */
   Sold: 'SOLD',
-  /** «Списан» — конечный статус, дальше переходов нет. */
+  /** «Списан» — конец, дальше хода нет. */
   WrittenOff: 'WRITTEN_OFF',
 } as const;
 
 export type LaptopStatus = (typeof LaptopStatus)[keyof typeof LaptopStatus];
 
-/**
- * Все статусы. Собирается из {@link LaptopStatus}, а не перечисляется руками, —
- * список не может отстать от перечисления.
- */
+/** Все статусы. Собирать из LaptopStatus, не рука: список отстать не может. */
 export const ALL_STATUSES: readonly LaptopStatus[] = Object.freeze(Object.values(LaptopStatus));
 
 /**
- * Статус, с которого начинается жизнь ноутбука: он приезжает на склад.
+ * Откуда ноутбук начинать жизнь.
  *
- * Значение по умолчанию в `createLaptop()` и начальная вершина автомата —
- * одно и то же, поэтому константа экспортируется: интерфейсу нужно знать,
- * в какой колонке появится новая карточка, и он не должен выяснять это
- * собственным предположением.
+ * Экспортировать, потому что интерфейс хотеть знать, в какой колонка рисовать
+ * кнопку «добавить». Пусть домен сказать, а не вёрстка гадать.
  */
 export const INITIAL_STATUS: LaptopStatus = LaptopStatus.InStock;
 
-/** Подписи ровно в формулировках ТЗ — попадают в тексты ошибок. */
+/** Подписи ровно как в ТЗ. Попадать в текст ошибки. */
 export const STATUS_LABELS = {
   IN_STOCK: 'На складе',
   RESERVED: 'Бронь',
@@ -51,14 +41,14 @@ export const STATUS_LABELS = {
 /**
  * Граф переходов из ТЗ.
  *
- * `satisfies Record<LaptopStatus, ...>` гарантирует, что ни один статус не забыт:
- * новый статус без описанных переходов не скомпилируется.
+ * `satisfies Record<LaptopStatus, …>` не дать забыть статус: новый статус
+ * без рёбер не скомпилироваться.
  */
 export const ALLOWED_TRANSITIONS = {
   IN_STOCK: ['RESERVED', 'SOLD', 'WRITTEN_OFF'],
   RESERVED: ['IN_STOCK', 'SOLD'],
-  // Возврат разрешён не всегда — ограничение по сроку живёт в guard'е перехода,
-  // см. GUARDS в rules.ts. Граф отвечает за «куда можно», условие — за «когда можно».
+  // Возврат не всегда можно — срок жить в rules.ts.
+  // Граф про «куда можно», условие про «когда можно».
   SOLD: ['IN_STOCK'],
   WRITTEN_OFF: [],
 } as const satisfies Record<LaptopStatus, readonly LaptopStatus[]>;
@@ -66,52 +56,48 @@ export const ALLOWED_TRANSITIONS = {
 export type TransitionGraph = typeof ALLOWED_TRANSITIONS;
 
 /**
- * Статусы, достижимые из `From`, — вычисляются из того же графа.
+ * Куда можно из `From`. Считать из того же графа.
  *
  * ```ts
- * type A = AllowedTarget<'SOLD'>;        // 'IN_STOCK'
- * type B = AllowedTarget<'WRITTEN_OFF'>; // never — терминальность доказана типами
+ * AllowedTarget<'SOLD'>;        // 'IN_STOCK'
+ * AllowedTarget<'WRITTEN_OFF'>; // never — тупик доказан типом
  * ```
  */
 export type AllowedTarget<From extends LaptopStatus> = TransitionGraph[From][number];
 
 /**
- * Конечные статусы — те, из которых не ведёт ни одно ребро. Выводится из графа,
- * а не зашито строкой `'WRITTEN_OFF'`.
+ * Конечные статусы: откуда рёбер нет. Считать из графа, не писать строкой.
  *
- * Обёртка в кортеж `[T] extends [never]` обязательна: без неё условный тип
- * распределился бы по `never` и дал бы `never` для всех статусов.
+ * Обёртка `[T] extends [never]` обязательна — иначе условный тип
+ * распределиться по never и дать never для всех.
  */
 export type TerminalStatus = {
   [S in LaptopStatus]: [AllowedTarget<S>] extends [never] ? S : never;
 }[LaptopStatus];
 
-/** Ключ ребра графа — используется для карты guard'ов. */
+/** Ключ ребра. Нужен карте условий. */
 export type TransitionKey = `${LaptopStatus}->${LaptopStatus}`;
 
 export function transitionKey(from: LaptopStatus, to: LaptopStatus): TransitionKey {
   return `${from}->${to}`;
 }
 
-/**
- * Проверка значения, пришедшего извне (JSON, запрос, БД). Нужна потому, что
- * типы TypeScript не существуют в рантайме: на границе системы `status` — это `unknown`.
- */
+/** Это статус? Нужно на границе: тип в рантайм не жить, из JSON прийти что угодно. */
 export function isLaptopStatus(value: unknown): value is LaptopStatus {
   return typeof value === 'string' && (ALL_STATUSES as readonly string[]).includes(value);
 }
 
-/** Куда разрешено уходить из статуса по графу (без учёта guard'ов). */
+/** Куда можно по графу. Условия не учитывать. */
 export function allowedTransitionsFrom(status: LaptopStatus): readonly LaptopStatus[] {
   return ALLOWED_TRANSITIONS[status];
 }
 
-/** Конечный ли статус. Определяется отсутствием исходящих рёбер. */
+/** Конечный? Значит рёбер наружу нет. */
 export function isTerminalStatus(status: LaptopStatus): boolean {
   return ALLOWED_TRANSITIONS[status].length === 0;
 }
 
-/** Подпись статуса для человека. */
+/** Подпись для человек. */
 export function statusLabel(status: LaptopStatus): string {
   return STATUS_LABELS[status];
 }

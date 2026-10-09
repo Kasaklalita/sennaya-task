@@ -48,11 +48,10 @@ export function StatusBoard() {
   const historyItem = board.laptops.find((item) => item.laptop.id === historyId) ?? null;
 
   /**
-   * Пока карточку тащат — спрашиваем домен сразу про все колонки.
+   * Карточку тащат — спросить домен сразу про все колонки.
    *
-   * Это подсказка, а не решение: домен выполняется прямо в браузере, поэтому
-   * ответ мгновенный и без обращения к сети. Авторитетную проверку делает
-   * сервер тем же кодом при отпускании.
+   * Это подсказка, не решение. Домен крутиться прямо в браузере: ответ
+   * мгновенный, сеть не нужна. Настоящую проверку делать сервер тем же кодом.
    */
   const verdicts = useMemo(
     () => (activeItem === null ? null : evaluateTargets(activeItem.laptop, board.now)),
@@ -73,8 +72,8 @@ export function StatusBoard() {
       return;
     }
 
-    // id колонки — это статус. Проверяем его тем же guard'ом, что и домен:
-    // на границе между библиотекой перетаскивания и доменом это снова `unknown`.
+    // id колонки — это статус. Проверить тем же guard'ом, что и домен:
+    // на границе с библиотекой таскания это снова `unknown`.
     const target = String(over.id);
     if (!isLaptopStatus(target)) {
       return;
@@ -83,7 +82,7 @@ export function StatusBoard() {
     const laptopId = String(active.id);
     const item = board.laptops.find((entry) => entry.laptop.id === laptopId);
 
-    // Отпустили там же, откуда взяли — это не попытка перехода, а отмена.
+    // Отпустили там же, где взяли — это не попытка, а отмена.
     if (item === undefined || item.laptop.status === target) {
       return;
     }
@@ -94,9 +93,8 @@ export function StatusBoard() {
   /**
    * Тело страницы.
    *
-   * Вынесено в переменную, а не в ранний `return`, потому что шапка
-   * с заголовком и переключателем вкладок должна оставаться на месте
-   * и во время загрузки, и при ошибке.
+   * В переменной, не в раннем `return`: шапка с заголовком и вкладками должна
+   * стоять на месте и пока грузится, и при ошибке.
    */
   let body: ReactNode;
 
@@ -150,7 +148,7 @@ export function StatusBoard() {
               },
             }}
           >
-            {/* Колонки порождаются из ALL_STATUSES: добавится статус в домене — появится колонка. */}
+            {/* Колонки расти из ALL_STATUSES: добавить статус в домен — появиться колонка. */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {ALL_STATUSES.map((status) => (
                 <StatusColumn
@@ -161,7 +159,7 @@ export function StatusBoard() {
                   verdict={verdicts?.find((verdict) => verdict.to === status) ?? null}
                   isSource={activeItem?.laptop.status === status}
                   onOpenHistory={setHistoryId}
-                  // Куда приезжает новый ноутбук — знает домен, не вёрстка.
+                  // Куда приезжать новому ноутбуку — знать домен, не вёрстка.
                   onAdd={status === INITIAL_STATUS ? () => void board.add() : undefined}
                 />
               ))}
@@ -183,8 +181,8 @@ export function StatusBoard() {
   }
 
   return (
-    // Корень Tabs охватывает и шапку, и содержимое: переключатель живёт
-    // в шапке, а панели — ниже, и оба должны видеть одно состояние.
+    // Корень Tabs обнимать и шапку, и панели: переключатель жить в шапке,
+    // панели ниже, а состояние у них одно.
     <Tabs defaultValue="board">
       <header className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="text-2xl font-semibold tracking-tight">Статусы ноутбука на складе</h1>

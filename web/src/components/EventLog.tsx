@@ -20,12 +20,11 @@ interface EventLogProps {
 }
 
 /**
- * Журнал попыток — включая отклонённые.
+ * Журнал попыток, и отказы тоже.
  *
- * Отклонённые переходы в историю ноутбука не попадают (её ведёт домен, и там
- * только случившиеся изменения), но для аудита важны именно они. Хранится
- * в отдельной таблице `transition_attempts`, поэтому переживает перезагрузку
- * страницы вместе со всем остальным.
+ * Отказ в историю ноутбука не попадать — её ведёт домен, там только
+ * случившееся. Но для аудита важны именно отказы. Лежать в отдельной таблице,
+ * поэтому переживать перезагрузку.
  */
 export function EventLog({ entries, resolveModel }: EventLogProps) {
   return (
@@ -75,8 +74,8 @@ export function EventLog({ entries, resolveModel }: EventLogProps) {
                       {entry.errorCode ?? 'OK'}
                     </span>
                   </TableCell>
-                  {/* whitespace-normal переопределяет nowrap из TableCell:
-                      сообщения домена длинные и должны переноситься, а не обрезаться. */}
+                  {/* whitespace-normal бить nowrap из TableCell: текст домена
+                      длинный, он должен переноситься, а не обрезаться. */}
                   <TableCell className="min-w-80 text-xs leading-snug whitespace-normal text-muted-foreground">
                     {entry.message}
                   </TableCell>

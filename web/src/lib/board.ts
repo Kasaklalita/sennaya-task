@@ -20,14 +20,13 @@ import {
 /**
  * Состояние доски.
  *
- * Правил автомата здесь по-прежнему нет. Домен используется ровно в одном месте —
- * `evaluateTargets`, и только для мгновенной подсказки во время перетаскивания.
- * Авторитет — сервер: он зовёт тот же `changeStatus`, и если его ответ разойдётся
- * с подсказкой (например, доску успели изменить в другой вкладке), побеждает
- * ответ сервера, а доска просто перерисовывается тем, что он прислал.
+ * Правил автомата тут нет. Домен звать в одном месте — `evaluateTargets`, и
+ * только ради мгновенной подсказки при перетаскивании. Главный — сервер: он
+ * звать тот же changeStatus. Ответы разойтись (доску поменяли в другой
+ * вкладке) — побеждать сервер, доска перерисоваться его данными.
  */
 
-/** Вердикт домена по одной целевой колонке. */
+/** Что домен сказать про одну колонку. */
 export interface TargetVerdict {
   readonly to: LaptopStatus;
   readonly allowed: boolean;
@@ -42,9 +41,9 @@ export function evaluateTargets(laptop: Laptop, now: Date): readonly TargetVerdi
 }
 
 /**
- * Смещение модельных часов хранится в localStorage, чтобы перезагрузка страницы
- * не возвращала наблюдателя в «сегодня» посреди эксперимента со сроком возврата.
- * Сами данные при этом живут в SQLite — часы это только точка зрения на них.
+ * Сдвиг часов хранить в localStorage: перезагрузка не должна швырять человека
+ * в «сегодня» посреди опыта со сроком. Сами данные жить в SQLite — часы это
+ * только точка зрения на них.
  */
 const CLOCK_OFFSET_KEY = 'laptop-board:clock-offset-ms';
 
@@ -69,7 +68,7 @@ export interface BoardController {
   readonly laptops: readonly BoardLaptop[];
   readonly attempts: Board['attempts'];
   readonly now: Date;
-  /** Часы сдвинуты относительно настоящего времени. */
+  /** Часы сдвинуты от настоящего времени. */
   readonly clockShifted: boolean;
   readonly loading: boolean;
   readonly loadError: string | null;
@@ -124,8 +123,8 @@ export function useBoard(callbacks: BoardCallbacks): BoardController {
           id: laptopId,
           to,
           now: new Date(Date.now() + offsetMs),
-          // Версия строки: если ноутбук успели изменить в другой вкладке,
-          // сервер ответит 409, а не затрёт чужое изменение.
+          // Версия строки: ноутбук поменяли в другой вкладке — сервер
+          // ответить 409, а не затереть чужое.
           expectedVersion: current.version,
         });
 

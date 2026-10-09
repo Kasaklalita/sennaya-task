@@ -6,7 +6,7 @@
     "moduleResolution": "nodenext",
     "types": ["node"],
 
-    /* Максимальная строгость: ошибки должны ловиться компилятором, а не тестами. */
+    /* Строгость на максимум: ошибку ловить компилятор, не тест. */
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -22,12 +22,11 @@
     "isolatedModules": true,
     "skipLibCheck": true,
 
-    /* Этот конфиг — только для проверки типов (включая тесты). Сборка — tsconfig.build.json. */
+    /* Этот конфиг только для проверки типов. Сборка — tsconfig.build.json. */
     "noEmit": true,
 
-    /* Алиасы фронтенда. Для домена они не используются (web/ сюда не входит),
-       но объявлены здесь, потому что их читают редактор и CLI shadcn/ui.
-       Проверка типов самого фронтенда — в tsconfig.web.json. */
+    /* Алиасы фронта. Домену не нужны (web/ сюда не входить), но их читать
+       редактор и CLI shadcn/ui. Типы фронта проверять tsconfig.web.json. */
     "paths": {
       "@/*": ["./web/src/*"],
       "@domain": ["./src/index.ts"]

@@ -28,9 +28,8 @@ interface HistoryDialogProps {
 }
 
 /**
- * Журнал изменений одного ноутбука — то, что ТЗ требует записывать:
- * какой статус был, какой стал, дата. Хранится в таблице `status_history`,
- * защищённой от изменения и удаления триггерами.
+ * Журнал одного ноутбука — то, что ТЗ просить писать: был, стал, дата.
+ * Лежать в `status_history`, триггеры не дать его менять и удалять.
  */
 export function HistoryDialog({ item, onClose }: HistoryDialogProps) {
   const history = item?.laptop.history ?? [];

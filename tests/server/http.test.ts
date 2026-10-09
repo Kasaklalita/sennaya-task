@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BoardDto } from '../../server/api.js';
 import { SEEDED_AT, useApiServer } from './helpers.js';
 
-/** Поднимает настоящий HTTP-сервер на свободном порту и ходит в него fetch'ем. */
+/** Поднять настоящий сервер на свободном порту и ходить в него fetch'ем. */
 describe('HTTP', () => {
   const context = useApiServer();
 
@@ -89,7 +89,7 @@ describe('HTTP', () => {
   it('пустое тело запроса не роняет сервер', async () => {
     const response = await fetch(`${context.baseUrl}/api/laptops/nb-001/status`, { method: 'POST' });
 
-    // Пустое тело читается как {}, дальше его отвергает разбор: поля "to" нет.
+    // Пустое тело читать как {}, дальше его отвергать разбор: поля "to" нет.
     expect(response.status).toBe(400);
     const { error } = (await response.json()) as { error: { code: string } };
     expect(error.code).toBe('BAD_REQUEST');
@@ -121,14 +121,14 @@ describe('HTTP', () => {
 });
 
 /**
- * Продакшен-режим: один процесс отдаёт и API, и собранный фронтенд.
- * В разработке статику раздаёт Vite, и STATIC_DIR не задан.
+ * Как в проде: один процесс отдавать и API, и собранный фронт.
+ * В разработке статику давать Vite, STATIC_DIR не задан.
  */
 describe('сервер со встроенной раздачей фронтенда', () => {
   let staticRoot: string;
 
-  // Каталог готовится до хука сервера: Vitest выполняет хуки в порядке
-  // объявления, и useApiServer прочитает уже созданный путь.
+  // Каталог готовить ДО хука сервера: Vitest выполнять хуки по порядку,
+  // и useApiServer прочитать уже созданный путь.
   beforeEach(() => {
     staticRoot = mkdtempSync(join(tmpdir(), 'laptop-dist-web-'));
     mkdirSync(join(staticRoot, 'assets'));
@@ -162,7 +162,7 @@ describe('сервер со встроенной раздачей фронтен
   });
 
   it('несуществующий путь под /api остаётся JSON-ошибкой 404', async () => {
-    // Иначе клиент получил бы HTML вместо ответа API и упал на разборе JSON.
+    // Иначе клиент получить HTML вместо ответа API и упасть на разборе JSON.
     const response = await fetch(`${context.baseUrl}/api/нет-такого`);
 
     expect(response.status).toBe(404);

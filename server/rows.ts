@@ -1,18 +1,17 @@
 import { isLaptopStatus, type LaptopStatus } from '../src/index.js';
 
 /**
- * Безопасное чтение строк из БД.
+ * Читать строки из БД безопасно.
  *
- * Строка из базы — такие же недоверенные данные, как JSON из запроса: SQLite
- * типизирован динамически, колонка `TEXT` может содержать BLOB, а `INTEGER` —
- * строку. Здесь каждое значение проверяется и превращается в доменный тип либо
- * честно роняет запрос.
+ * Строка из базы — такой же чужой данные, как JSON из запроса. SQLite типизирован
+ * динамически: в колонке TEXT лежать BLOB, в INTEGER — строка. Тут каждое
+ * значение проверять и превращать в доменный тип либо честно ронять запрос.
  *
- * Падать громко здесь важнее, чем отдать «что-то»: `NaN`-дата, просочившаяся
- * в автомат, молча разрешила бы возврат — `NaN > срок` даёт `false`.
+ * Падать громко важнее, чем отдать «что-то»: NaN-дата, проскочившая в автомат,
+ * молча разрешить возврат — `NaN > срок` дать `false`.
  */
 
-/** Повреждение данных в хранилище — это не ошибка пользователя, а сбой. */
+/** Битые данные в хранилище — это не ошибка человека, а сбой. */
 export class CorruptRowError extends Error {
   constructor(column: string, value: unknown) {
     super(`Повреждённые данные в БД: ${column} = ${JSON.stringify(value) ?? String(value)}`);
@@ -20,10 +19,10 @@ export class CorruptRowError extends Error {
   }
 }
 
-/** Строка результата запроса до проверки. */
+/** Строка из запроса, ещё не проверенная. */
 export type Row = Record<string, unknown>;
 
-/** Статус из БД проверяется тем же guard'ом, что и значение из JSON. */
+/** Статус из БД проверять тем же guard'ом, что и значение из JSON. */
 export function readStatus(value: unknown, column: string): LaptopStatus {
   if (!isLaptopStatus(value)) {
     throw new CorruptRowError(column, value);
@@ -53,14 +52,14 @@ export function readInteger(value: unknown, column: string): number {
   if (typeof value === 'number') {
     return value;
   }
-  // node:sqlite умеет отдавать BIGINT для больших целых.
+  // node:sqlite отдавать BIGINT для больших чисел.
   if (typeof value === 'bigint') {
     return Number(value);
   }
   throw new CorruptRowError(column, value);
 }
 
-/** Дата в формате, который понимает и SQLite, и `readDate`. */
+/** Дата в формате, который понимать и SQLite, и readDate. */
 export function toIso(date: Date): string {
   return date.toISOString();
 }

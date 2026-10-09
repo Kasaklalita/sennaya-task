@@ -195,9 +195,8 @@ describe('отказы домена переводятся в коды HTTP', ()
   });
 
   /**
-   * Таблица соответствия проверяется целиком: `satisfies` в api.ts гарантирует,
-   * что она исчерпывающая на этапе компиляции, а этот тест — что значения
-   * именно те, которые задумывались.
+   * Таблицу проверять целиком. `satisfies` в dto.ts ручаться, что она полная
+   * на этапе компиляции, а этот тест — что числа те самые.
    */
   it('таблица кодов покрывает все ошибки домена', () => {
     const expected: Record<string, number> = {
@@ -283,8 +282,8 @@ describe('проверка живости', () => {
   });
 
   it('недоступная база — это 503, а не «всё хорошо»', () => {
-    // Сервис, который рапортует «жив» при мёртвой базе, вреднее молчащего:
-    // балансировщик продолжит слать на него трафик.
+    // Сервис, который кричать «жив» при мёртвой базе, вреднее молчащего:
+    // балансировщик продолжить слать на него трафик.
     context.db.close();
 
     const response = getHealth(context.db);
@@ -292,7 +291,7 @@ describe('проверка живости', () => {
     expect(response.status).toBe(503);
     expect((response.body as { ok: boolean }).ok).toBe(false);
 
-    // Повторное закрытие в afterEach пройдёт без ошибки.
+    // Повторное закрытие в afterEach пройти без ошибки.
   });
 });
 
@@ -316,14 +315,14 @@ describe('добавление ноутбука', () => {
     const first = (postLaptop(context.db).body as { createdId: string }).createdId;
     const second = (postLaptop(context.db).body as { createdId: string }).createdId;
 
-    // В сиде шесть ноутбуков — nb-001…nb-006.
+    // В сиде шесть штук: nb-001…nb-006.
     expect(first).toBe('nb-007');
     expect(second).toBe('nb-008');
     expect(new Set([first, second]).size).toBe(2);
   });
 
   it('номер считается по числу, а не по строке', () => {
-    // Десятый ноутбук не должен «потеряться» за nb-009 при сравнении строк.
+    // Десятый не должен потеряться за nb-009 при сравнении строк.
     for (let index = 0; index < 4; index += 1) {
       postLaptop(context.db);
     }
@@ -344,7 +343,7 @@ describe('добавление ноутбука', () => {
     expect(postTransition(context.db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
       200,
     );
-    // …а в тот же статус — нет.
+    // …а в тот же статус нельзя.
     expect(postTransition(context.db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
       409,
     );

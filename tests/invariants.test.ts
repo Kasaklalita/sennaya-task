@@ -17,12 +17,11 @@ import {
 import { SALE_DATE, days, inStock } from './helpers.js';
 
 /**
- * Детерминированный PRNG (mulberry32).
+ * Свой PRNG (mulberry32).
  *
- * Свой генератор вместо `Math.random()` — чтобы падение теста было
- * воспроизводимым: тот же сид даёт тот же обход. Внешняя библиотека
- * property-based тестирования здесь не нужна: домен маленький, а
- * нулевые зависимости — часть ценности пакета.
+ * Не `Math.random()`, чтобы падение теста повторялось: тот же сид — тот же
+ * обход. Чужая библиотека тут не нужна: домен маленький, а ноль зависимостей —
+ * часть ценности пакета.
  */
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
@@ -37,10 +36,7 @@ function mulberry32(seed: number): () => number {
 
 const KNOWN_CODES: readonly string[] = Object.values(TransitionErrorCode);
 
-/**
- * Инварианты агрегата, которые обязаны выполняться после любого числа
- * любых переходов — успешных и неуспешных.
- */
+/** Что обязано быть верно после любого числа переходов — удачных и нет. */
 function expectAggregateIsConsistent(laptop: Laptop, initialStatus: Status): void {
   expect(isLaptopStatus(laptop.status)).toBe(true);
 
@@ -50,23 +46,23 @@ function expectAggregateIsConsistent(laptop: Laptop, initialStatus: Status): voi
     return;
   }
 
-  // Цепочка начинается с исходного статуса и заканчивается текущим.
+  // Цепь начинаться с первого статуса и кончаться текущим.
   expect(history[0]?.from).toBe(initialStatus);
   expect(history.at(-1)?.to).toBe(laptop.status);
 
   for (const [index, change] of history.entries()) {
     expect(isLaptopStatus(change.from)).toBe(true);
     expect(isLaptopStatus(change.to)).toBe(true);
-    // Переход в тот же статус в журнал попасть не может.
+    // Переход в себя в журнал попасть не может.
     expect(change.from).not.toBe(change.to);
-    // Каждая запись соответствует реальному ребру графа.
+    // Каждая запись — настоящее ребро графа.
     expect(allowedTransitionsFrom(change.from)).toContain(change.to);
 
     if (index > 0) {
       const previous = history[index - 1];
-      // Записи смыкаются: to предыдущей равен from следующей.
+      // Записи смыкаться: to прошлой равен from следующей.
       expect(change.from).toBe(previous?.to);
-      // Время не идёт назад.
+      // Время назад не идти.
       expect(change.at.getTime()).toBeGreaterThanOrEqual(previous?.at.getTime() ?? 0);
     }
   }
@@ -90,8 +86,8 @@ describe('model-based обход автомата', () => {
     const seenCodes = new Set<string>();
 
     for (let step = 0; step < STEPS; step += 1) {
-      // Время идёт вперёд случайными шагами 0…10 суток: так обход наталкивается
-      // и на успешные возвраты (шаг короче окна), и на истёкший срок (два шага подряд).
+      // Время идти вперёд шагами 0…10 суток: так обход натыкаться и
+      // на удачный возврат (шаг короче окна), и на истёкший срок (два шага).
       now = new Date(now.getTime() + Math.floor(random() * days(10)));
 
       const before = laptop;
@@ -100,7 +96,7 @@ describe('model-based обход автомата', () => {
 
       const result = changeStatus(before, target, { now });
 
-      // Главный инвариант чистой функции: вход не меняется никогда.
+      // Главный инвариант чистой функции: вход не меняться никогда.
       expect(JSON.stringify(before)).toBe(snapshot);
 
       if (result.ok) {
@@ -110,7 +106,7 @@ describe('model-based обход автомата', () => {
         expect(allowedTransitionsFrom(before.status)).toContain(target);
         expect(laptop.status).toBe(target);
         expect(laptop.history).toHaveLength(before.history.length + 1);
-        // Журнал append-only: прежние записи не переписываются.
+        // Журнал только дописывать: старые записи не переписывать.
         expect(laptop.history.slice(0, before.history.length)).toEqual(before.history);
         expect(laptop.history.at(-1)).toEqual({ from: before.status, to: target, at: now });
       } else {
@@ -121,8 +117,8 @@ describe('model-based обход автомата', () => {
 
       expectAggregateIsConsistent(laptop, initialStatus);
 
-      // Тупик — это состояние, из которого не проходит ни один переход.
-      // Их два вида, и второй обнаружил именно этот обход (см. ниже).
+      // Тупик — состояние, откуда не проходить ни один переход.
+      // Их два вида, и второй нашёл именно этот обход.
       if (availableTransitions(laptop, { now }).length === 0) {
         for (const anyTarget of ALL_STATUSES) {
           const blocked = changeStatus(laptop, anyTarget, { now });
@@ -143,17 +139,17 @@ describe('model-based обход автомата', () => {
       }
     }
 
-    // Обход должен быть содержательным, а не «всё запрещено с первого шага».
+    // Обход должен быть содержательным, а не «всё нельзя с первого шага».
     expect(successes).toBeGreaterThan(100);
 
     // «Списан» — тупик по графу, он ожидаем.
     expect(terminalDeadEnds).toBeGreaterThan(5);
 
-    // А это — находка обхода: «Продан» с истёкшим сроком возврата тоже тупик,
-    // хотя по графу из него есть ребро. Подробности и вывод — в README.
+    // А это находка обхода: «Продан» с истёкшим сроком тоже тупик, хотя
+    // по графу ребро есть. Подробности в README.
     expect(expiredDeadEnds).toBeGreaterThan(5);
 
-    // Обход должен реально задеть все ошибки, достижимые на корректных данных.
+    // Обход должен задеть все ошибки, достижимые на хороших данных.
     expect([...seenCodes].sort()).toEqual([
       'RETURN_WINDOW_EXPIRED',
       'SAME_STATUS',
@@ -228,13 +224,12 @@ describe('неизменяемость', () => {
   });
 
   /**
-   * Документирует ограничение платформы, а не желаемое поведение.
+   * Это про ограничение платформы, не про желаемое поведение.
    *
-   * `Object.freeze` замораживает только собственные свойства объекта, а `Date`
-   * хранит время во внутреннем слоте — заморозка его не закрывает. Поэтому
-   * «полная» неизменяемость дат достигается не freeze'ом, а копированием на
-   * входе и выходе (см. тест выше). Если бы требовалась неизменяемость и для
-   * уже выданных наружу значений, журнал хранил бы ISO-строки вместо `Date`.
+   * `Object.freeze` морозить только свойства объекта, а `Date` держать время
+   * во внутреннем слоте — заморозка его не закрыть. Поэтому неизменяемость
+   * дат держаться на копировании, не на freeze. Нужна была бы и для уже
+   * выданных наружу — журнал хранил бы ISO-строки вместо `Date`.
    */
   it('известное ограничение: Object.freeze не защищает внутреннее состояние Date', () => {
     const laptop = changeStatusOrThrow(inStock(), LaptopStatus.Reserved, { now: SALE_DATE });

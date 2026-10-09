@@ -5,19 +5,18 @@ import { dirname } from 'node:path';
 import { DROP_SQL, SCHEMA_SQL } from './schema.js';
 
 /**
- * Открытие базы.
+ * Открыть базу.
  *
- * Используется встроенный в Node модуль `node:sqlite` — поэтому у проекта
- * по-прежнему ноль рантайм-зависимостей: ни драйвера, ни нативной сборки.
+ * Модуль node:sqlite встроен в Node. Поэтому зависимость рантайм по-прежнему
+ * ноль: ни драйвера, ни нативной сборки.
  */
 export function openDatabase(location: string): DatabaseSync {
   if (location !== ':memory:') {
     try {
       mkdirSync(dirname(location), { recursive: true });
     } catch (error) {
-      // Самый вероятный сбой при деплое: том примонтирован, но процесс
-      // работает не от root и писать в точку монтирования не может.
-      // Голый EACCES об этом не рассказывает, а подсказка — рассказывает.
+      // Самый частый сбой при деплое: том есть, а процесс не от root и
+      // писать не может. Голый EACCES об этом молчать, подсказка — нет.
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(
         `Не удалось подготовить каталог для базы (${dirname(location)}): ${reason}. ` +
@@ -28,10 +27,10 @@ export function openDatabase(location: string): DatabaseSync {
 
   const db = new DatabaseSync(location);
 
-  // Внешние ключи в SQLite выключены по умолчанию — без этого ON DELETE CASCADE
-  // и ссылочная целостность просто не работают.
+  // В SQLite внешние ключи по умолчанию ВЫКЛЮЧЕНЫ. Без этого ни CASCADE,
+  // ни ссылочная целостность не работать.
   db.exec('PRAGMA foreign_keys = ON');
-  // WAL: читатели не блокируют писателя. Для файла на диске, не для :memory:.
+  // WAL: читатель не мешать писателю. Только для файла, не для :memory:.
   if (location !== ':memory:') {
     db.exec('PRAGMA journal_mode = WAL');
   }
@@ -45,19 +44,16 @@ export function openDatabase(location: string): DatabaseSync {
 /**
  * Полный сброс.
  *
- * Именно DROP, а не DELETE: журнал изменений защищён триггерами от удаления
- * строк, и это правильно — обойти их ради «кнопки сброса» значило бы ослабить
- * инвариант. DROP TABLE триггеры не задевает.
+ * Именно DROP, не DELETE: журнал защищён триггерами от удаления, и это
+ * правильно. Обойти их ради кнопки «сбросить» — ослабить инвариант.
+ * DROP TABLE триггеры не задевать.
  */
 export function resetDatabase(db: DatabaseSync): void {
   db.exec(DROP_SQL);
   db.exec(SCHEMA_SQL);
 }
 
-/**
- * Выполняет работу в транзакции: смена статуса и запись в журнал должны
- * попасть в базу вместе или не попасть вовсе.
- */
+/** Работа в транзакции: статус и журнал попасть в базу вместе или никак. */
 export function inTransaction<T>(db: DatabaseSync, work: () => T): T {
   db.exec('BEGIN IMMEDIATE');
   try {

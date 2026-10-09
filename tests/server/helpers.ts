@@ -12,29 +12,28 @@ import { createApiServer } from '../../server/http.js';
 /**
  * Обвязка для тестов сервера.
  *
- * Одна и та же пара «открыть базу в памяти — закрыть после теста» встречалась
- * семнадцать раз. Здесь она описана один раз, и у неё есть ещё одно свойство:
- * забыть `db.close()` в новом наборе тестов больше нельзя.
+ * Пара «открыть базу в памяти — закрыть после теста» встречаться семнадцать
+ * раз. Тут она одна. И ещё: забыть `db.close()` в новом наборе больше нельзя.
  */
 
-/** Фиксированное «сейчас» сида: тесты не должны зависеть от реального времени. */
+/** «Сейчас» сида. Тест не должен зависеть от настоящего времени. */
 export const SEEDED_AT = new Date('2026-03-01T12:00:00.000Z');
 
-/** Момент, сдвинутый относительно сида на целое число суток. */
+/** Момент, сдвинутый от сида на целое число суток. */
 export function iso(offsetDays: number): string {
   return new Date(SEEDED_AT.getTime() + offsetDays * MS_IN_DAY).toISOString();
 }
 
 export interface DatabaseContext {
-  /** Переоткрывается перед каждым тестом, поэтому читается через свойство. */
+  /** Открывать заново перед каждым тестом, поэтому читать через свойство. */
   db: DatabaseSync;
 }
 
 /**
- * База в памяти на время одного теста.
+ * База в памяти на один тест.
  *
- * Свои `beforeEach` можно регистрировать после вызова — Vitest выполняет хуки
- * в порядке объявления, так что база к тому моменту уже открыта.
+ * Свой `beforeEach` можно вешать после вызова: Vitest выполнять хуки в порядке
+ * объявления, база к тому моменту уже открыта.
  */
 export function useDatabase(options: { readonly seeded?: boolean } = {}): DatabaseContext {
   const context = { db: undefined as unknown as DatabaseSync };
@@ -50,8 +49,7 @@ export function useDatabase(options: { readonly seeded?: boolean } = {}): Databa
     try {
       context.db.close();
     } catch {
-      // Тест мог закрыть базу намеренно — например проверяя, что сервис
-      // отвечает 503 при недоступном хранилище.
+      // Тест мог закрыть базу нарочно — например проверяя 503.
     }
   });
 
@@ -59,11 +57,11 @@ export function useDatabase(options: { readonly seeded?: boolean } = {}): Databa
 }
 
 export interface ServerContext extends DatabaseContext {
-  /** Адрес поднятого сервера, например `http://127.0.0.1:54321`. */
+  /** Адрес сервера, например `http://127.0.0.1:54321`. */
   baseUrl: string;
 }
 
-/** Настоящий HTTP-сервер на свободном порту — на время одного теста. */
+/** Настоящий HTTP-сервер на свободном порту, на один тест. */
 export function useApiServer(
   options: { readonly staticRoot?: () => string } = {},
 ): ServerContext {
@@ -75,8 +73,8 @@ export function useApiServer(
     server = createApiServer(context.db, staticRoot === undefined ? {} : { staticRoot });
 
     await new Promise<void>((resolve) => {
-      // Порт 0 — пусть операционная система выдаст свободный:
-      // параллельные файлы тестов не должны драться за один номер.
+      // Порт 0 — пусть система даст свободный: файлы тестов бегать
+      // параллельно и не должны драться за один номер.
       server.listen(0, '127.0.0.1', resolve);
     });
 
