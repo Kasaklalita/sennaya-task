@@ -1,4 +1,4 @@
-import { DatabaseIcon, RotateCcwIcon, TimerResetIcon } from 'lucide-react';
+import { RotateCcwIcon, TimerResetIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -120,12 +120,6 @@ export function ClockControl({
         <RotateCcwIcon className="size-3.5" aria-hidden />
         Сбросить базу
       </Button>
-
-      <p className="flex w-full items-center gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">
-        <DatabaseIcon className="size-3.5 shrink-0" aria-hidden />
-        Состояние хранится в SQLite и переживает перезагрузку страницы. Часы — это точка
-        зрения на данные, а не сами данные.
-      </p>
     </div>
   );
 }
