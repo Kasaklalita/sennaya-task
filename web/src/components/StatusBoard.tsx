@@ -200,9 +200,9 @@ export function StatusBoard() {
           href="https://t.me/PolienkoVeniamin"
           target="_blank"
           rel="noreferrer noopener"
-          className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground hover:underline"
+          className="flex items-center gap-1.5 text-base text-muted-foreground underline decoration-muted-foreground/30 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground"
         >
-          <SendIcon className="size-3" aria-hidden />
+          <SendIcon className="size-4" aria-hidden />
           Вениамин Полиенко
         </a>
 
