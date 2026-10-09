@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { getBoard, postReset, postTransition, type ApiResponse } from './api.js';
+import { getBoard, postLaptop, postReset, postTransition, type ApiResponse } from './api.js';
 
 /** Защита от бесконечного тела запроса. Доска маленькая, мегабайт не бывает. */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -84,6 +84,11 @@ export async function handleRequest(
   try {
     if (method === 'GET' && path === '/api/board') {
       send(response, getBoard(db));
+      return;
+    }
+
+    if (method === 'POST' && path === '/api/laptops') {
+      send(response, postLaptop(db));
       return;
     }
 

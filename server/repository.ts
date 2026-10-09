@@ -162,6 +162,27 @@ export function getLaptop(db: DatabaseSync, id: string): LaptopRecord | undefine
   return toRecord(laptopRow, historyRows);
 }
 
+/**
+ * Следующий свободный идентификатор вида `nb-007`.
+ *
+ * Номер вычисляется как `MAX(…) + 1` по числовой части, а не по строке: иначе
+ * `nb-010` оказался бы «меньше» `nb-009` при лексикографическом сравнении.
+ * Вызывать внутри той же транзакции, что и вставку, — тогда два одновременных
+ * добавления не получат один и тот же номер.
+ */
+export function nextLaptopId(db: DatabaseSync): string {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(MAX(CAST(SUBSTR(id, 4) AS INTEGER)), 0) + 1 AS next
+       FROM laptops
+       WHERE id GLOB 'nb-[0-9]*'`,
+    )
+    .get() as Row | undefined;
+
+  const next = row === undefined ? 1 : readInteger(row['next'], 'laptops.next_id');
+  return `nb-${String(next).padStart(3, '0')}`;
+}
+
 export function insertLaptop(
   db: DatabaseSync,
   record: { readonly laptop: Laptop; readonly model: string },

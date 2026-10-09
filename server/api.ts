@@ -2,18 +2,21 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import {
   changeStatus,
+  createLaptop,
   isLaptopStatus,
   type LaptopStatus,
   type TransitionError,
   type TransitionErrorCode,
 } from '../src/index.js';
 import { inTransaction, resetDatabase } from './db.js';
+import { randomModelName } from './catalog.js';
 import {
   applyTransition,
   getLaptop,
   insertLaptop,
   listAttempts,
   listLaptops,
+  nextLaptopId,
   recordAttempt,
   type AttemptRecord,
   type LaptopRecord,
@@ -271,6 +274,29 @@ export function postTransition(db: DatabaseSync, laptopId: string, body: unknown
   }
 
   return { status: 200, body: { board: readBoard(db) } };
+}
+
+/**
+ * Добавляет новый ноутбук.
+ *
+ * Статус не выбирается здесь: его задаёт домен через `createLaptop()`, который
+ * по умолчанию ставит {@link INITIAL_STATUS}. Сервер приносит только то, чего
+ * домен не знает, — идентификатор и название модели.
+ */
+export function postLaptop(
+  db: DatabaseSync,
+  random: () => number = Math.random,
+): ApiResponse {
+  const created = inTransaction(db, () => {
+    // Номер и вставка — в одной транзакции, иначе два одновременных
+    // добавления могли бы получить одинаковый идентификатор.
+    const id = nextLaptopId(db);
+    const laptop = createLaptop({ id });
+    insertLaptop(db, { laptop, model: randomModelName(random) });
+    return id;
+  });
+
+  return { status: 201, body: { createdId: created, board: readBoard(db) } };
 }
 
 export function postReset(db: DatabaseSync, now: Date = new Date()): ApiResponse {
