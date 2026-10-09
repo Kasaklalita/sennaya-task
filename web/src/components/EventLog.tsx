@@ -30,25 +30,8 @@ interface EventLogProps {
 export function EventLog({ entries, resolveModel }: EventLogProps) {
   return (
     <div className="rounded-xl border bg-card">
-      {/* Заголовок не дублируем: вкладка уже называется «Журнал попыток». */}
-      <header className="border-b px-4 py-3">
-        <p className="text-[11px] text-muted-foreground">
-          Всё, что вернул домен, включая отказы. Хранится в таблице
-          <code className="mx-1 font-mono">transition_attempts</code>и переживает
-          перезагрузку страницы.
-        </p>
-      </header>
-
       {entries.length === 0 ? (
-        <p className="px-4 py-16 text-center text-sm text-muted-foreground">
-          Пока пусто. Перейдите на вкладку «Доска», перетащите карточку между колонками —
-          здесь появится ответ домена.
-          <br />
-          <span className="text-[11px]">
-            Попробуйте и запрещённый переход: текст ошибки берётся из `changeStatus`,
-            а не придумывается интерфейсом.
-          </span>
-        </p>
+        <p className="px-4 py-16 text-center text-sm text-muted-foreground">Пока пусто</p>
       ) : (
         <ScrollArea className="h-[34rem]">
           <Table>
