@@ -12,6 +12,7 @@ import {
 } from '../../src/index.js';
 import {
   getBoard,
+  getHealth,
   httpStatusFor,
   postLaptop,
   postReset,
@@ -324,6 +325,29 @@ describe('конкурентное изменение', () => {
     postTransition(db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
 
     expect(postTransition(db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) }).status).toBe(200);
+  });
+});
+
+describe('проверка живости', () => {
+  it('здоровый сервис отвечает 200', () => {
+    const db = openDatabase(':memory:');
+    seedDatabase(db, SEEDED_AT);
+
+    expect(getHealth(db)).toEqual({ status: 200, body: { ok: true } });
+
+    db.close();
+  });
+
+  it('недоступная база — это 503, а не «всё хорошо»', () => {
+    // Сервис, который рапортует «жив» при мёртвой базе, вреднее молчащего:
+    // балансировщик продолжит слать на него трафик.
+    const db = openDatabase(':memory:');
+    db.close();
+
+    const response = getHealth(db);
+
+    expect(response.status).toBe(503);
+    expect((response.body as { ok: boolean }).ok).toBe(false);
   });
 });
 

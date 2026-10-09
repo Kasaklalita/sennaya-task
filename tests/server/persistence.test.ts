@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -379,6 +379,24 @@ describe('аудит попыток', () => {
     expect(attempts[1]?.ok).toBe(true);
     expect(attempts[1]?.errorCode).toBeNull();
     expect(attempts[0]?.modelNow).toEqual(SALE_DATE);
+  });
+});
+
+describe('непригодный путь к базе', () => {
+  /**
+   * Самый вероятный сбой при деплое: том примонтирован не туда или без прав.
+   * Голый ENOTDIR/EACCES об этом не рассказывает, а подсказка — рассказывает.
+   */
+  it('объясняет, что делать, вместо системного кода ошибки', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'laptop-badpath-'));
+    const file = join(directory, 'это-файл');
+    writeFileSync(file, 'не каталог');
+
+    expect(() => openDatabase(join(file, 'laptops.db'))).toThrow(
+      /Не удалось подготовить каталог для базы.*права на точку монтирования/s,
+    );
+
+    rmSync(directory, { recursive: true, force: true });
   });
 });
 

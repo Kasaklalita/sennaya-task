@@ -1,4 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Server } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -141,5 +144,67 @@ describe('HTTP', () => {
     const response = await fetch(`${baseUrl}/api/laptops/nb-001/status`);
 
     expect(response.status).toBe(405);
+  });
+});
+
+/**
+ * Продакшен-режим: один процесс отдаёт и API, и собранный фронтенд.
+ * В разработке статику раздаёт Vite, и STATIC_DIR не задан.
+ */
+describe('сервер со встроенной раздачей фронтенда', () => {
+  let db: DatabaseSync;
+  let server: Server;
+  let baseUrl: string;
+  let staticRoot: string;
+
+  beforeEach(async () => {
+    staticRoot = mkdtempSync(join(tmpdir(), 'laptop-dist-web-'));
+    mkdirSync(join(staticRoot, 'assets'));
+    writeFileSync(join(staticRoot, 'index.html'), '<!doctype html><title>доска</title>');
+    writeFileSync(join(staticRoot, 'assets', 'app-abc.js'), 'console.log(1)');
+
+    db = openDatabase(':memory:');
+    seedDatabase(db, SEEDED_AT);
+    server = createApiServer(db, { staticRoot });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+    db.close();
+    rmSync(staticRoot, { recursive: true, force: true });
+  });
+
+  it('корень отдаёт разметку, а не JSON', async () => {
+    const response = await fetch(`${baseUrl}/`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(await response.text()).toContain('доска');
+  });
+
+  it('ассеты раздаются', async () => {
+    expect((await fetch(`${baseUrl}/assets/app-abc.js`)).status).toBe(200);
+  });
+
+  it('API продолжает работать и не подменяется разметкой', async () => {
+    const response = await fetch(`${baseUrl}/api/board`);
+
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(((await response.json()) as BoardDto).laptops).toHaveLength(6);
+  });
+
+  it('несуществующий путь под /api остаётся JSON-ошибкой 404', async () => {
+    // Иначе клиент получил бы HTML вместо ответа API и упал на разборе JSON.
+    const response = await fetch(`${baseUrl}/api/нет-такого`);
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('content-type')).toContain('application/json');
   });
 });
