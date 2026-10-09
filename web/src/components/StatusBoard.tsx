@@ -9,7 +9,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { ALL_STATUSES, INITIAL_STATUS, RETURN_WINDOW_DAYS, isLaptopStatus } from '@domain';
+import { ALL_STATUSES, INITIAL_STATUS, isLaptopStatus } from '@domain';
 import { LayoutGridIcon, Loader2Icon, ScrollTextIcon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
@@ -19,7 +19,6 @@ import { EventLog } from '@/components/EventLog';
 import { HistoryDialog } from '@/components/HistoryDialog';
 import { LaptopCardBody } from '@/components/LaptopCard';
 import { StatusColumn } from '@/components/StatusColumn';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { evaluateTargets, useBoard } from '@/lib/board';
@@ -189,10 +188,6 @@ export function StatusBoard() {
     <Tabs defaultValue="board">
       <header className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="text-2xl font-semibold tracking-tight">Статусы ноутбука на складе</h1>
-
-        <Badge variant="outline" className="font-mono text-[11px]">
-          окно возврата: {RETURN_WINDOW_DAYS} дней
-        </Badge>
 
         <TabsList className="ml-auto">
           <TabsTrigger value="board">
