@@ -379,6 +379,8 @@ export const ALLOWED_TRANSITIONS = {
   WRITTEN_OFF: [],
 } as const satisfies Record<LaptopStatus, readonly LaptopStatus[]>;
 
+// rules.ts — единственный файл, который нужно открыть, чтобы изменить
+// или добавить условное правило перехода
 const GUARDS: Partial<Record<TransitionKey, Guard>> = {
   'SOLD->IN_STOCK': returnWindowGuard,
 };
@@ -628,18 +630,25 @@ TerminalStatus;               // 'WRITTEN_OFF' — вычислено, а не �
 
 ```
 src/                     ДОМЕН — без зависимостей, без React, без DOM, без SQL
-  status.ts              статусы, граф переходов, вывод типов из графа
-  types.ts               Laptop, StatusChange, Result, union ошибок
-  errors.ts              конструкторы ошибок, русские сообщения, StatusTransitionError
-  changeStatus.ts        движок автомата и условия на рёбрах
+  status.ts              статусы и граф переходов — «куда можно»
+  rules.ts               условия на рёбрах — «когда можно»; срок возврата
+  laptop.ts              агрегат: создание, дата продажи, запись в журнал
+  changeStatus.ts        движок — сводит их вместе и больше ничего не знает
+  errors.ts              ошибки: код, русский текст, структурированные детали
+  types.ts               типы домена и Result
+  time.ts                общие операции с датами
   index.ts               публичный API (явные реэкспорты, без export *)
 
 server/                  АДАПТЕРЫ — SQL и HTTP, ни одного правила автомата
   schema.ts              схема БД; список статусов печатается из домена
   db.ts                  открытие, миграция, сброс, транзакции
+  rows.ts                безопасное чтение строк: БД — недоверенный источник
   repository.ts          единственное место, где агрегат ↔ строки таблиц
-  api.ts                 обработчики, DTO, таблица «код домена → код HTTP»
+  dto.ts                 контракт сети и таблица «код домена → код HTTP»
+  api.ts                 обработчики запросов
   http.ts                маршрутизация на node:http
+  static.ts              раздача собранного фронтенда в продакшене
+  catalog.ts             случайные названия моделей
   seed.ts                наполнение; истории собираются самим доменом
   index.ts               точка входа процесса
 
@@ -653,7 +662,8 @@ web/src/                 ИНТЕРФЕЙС — только отображен�
 
 tests/                   200 тестов
   transitions returnWindow invariants types readme     — домен
-  server/persistence  server/api  server/http          — сервер
+  server/persistence  server/api  server/http
+  server/static       server/helpers                   — сервер
 ```
 
 ---

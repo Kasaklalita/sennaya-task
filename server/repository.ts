@@ -2,12 +2,19 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import {
   createLaptop,
-  isLaptopStatus,
   type Laptop,
   type LaptopStatus,
   type StatusChange,
   type TransitionErrorCode,
 } from '../src/index.js';
+import {
+  readDate,
+  readInteger,
+  readStatus,
+  readText,
+  toIso,
+  type Row,
+} from './rows.js';
 
 /**
  * Слой хранения: единственное место, где доменный агрегат превращается в строки
@@ -44,56 +51,6 @@ export interface AttemptRecord {
   /** Реальный момент записи. */
   readonly createdAt: Date;
 }
-
-/** Повреждение данных в хранилище — это не ошибка пользователя, а сбой. */
-class CorruptRowError extends Error {
-  constructor(column: string, value: unknown) {
-    super(`Повреждённые данные в БД: ${column} = ${JSON.stringify(value) ?? String(value)}`);
-    this.name = 'CorruptRowError';
-  }
-}
-
-/** Статус из БД — такое же недоверенное значение, как из JSON. Проверяем доменным guard'ом. */
-function readStatus(value: unknown, column: string): LaptopStatus {
-  if (!isLaptopStatus(value)) {
-    throw new CorruptRowError(column, value);
-  }
-  return value;
-}
-
-function readDate(value: unknown, column: string): Date {
-  if (typeof value !== 'string') {
-    throw new CorruptRowError(column, value);
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    throw new CorruptRowError(column, value);
-  }
-  return date;
-}
-
-function readText(value: unknown, column: string): string {
-  if (typeof value !== 'string') {
-    throw new CorruptRowError(column, value);
-  }
-  return value;
-}
-
-function readInteger(value: unknown, column: string): number {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (typeof value === 'bigint') {
-    return Number(value);
-  }
-  throw new CorruptRowError(column, value);
-}
-
-function toIso(date: Date): string {
-  return date.toISOString();
-}
-
-type Row = Record<string, unknown>;
 
 /**
  * Собирает агрегат из строк.

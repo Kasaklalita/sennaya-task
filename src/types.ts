@@ -43,6 +43,16 @@ export type Result<T, E> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: E };
 
+/** Удачный результат. Конструкторы живут рядом с типом, а не в каждом модуле. */
+export function ok<T>(value: T): Result<T, never> {
+  return { ok: true, value };
+}
+
+/** Неудачный результат. */
+export function err<E>(error: E): Result<never, E> {
+  return { ok: false, error };
+}
+
 /** Параметры смены статуса. */
 export interface ChangeStatusOptions {
   /**

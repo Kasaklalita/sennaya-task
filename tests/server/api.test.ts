@@ -1,11 +1,8 @@
-import type { DatabaseSync } from 'node:sqlite';
-
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   INITIAL_STATUS,
   LaptopStatus,
-  MS_IN_DAY,
   TransitionErrorCode,
   createLaptop,
   type TransitionError,
@@ -17,16 +14,11 @@ import {
   postLaptop,
   postReset,
   postTransition,
-  seedDatabase,
   type BoardDto,
 } from '../../server/api.js';
-import { inTransaction, openDatabase } from '../../server/db.js';
+import { inTransaction } from '../../server/db.js';
 import { insertLaptop } from '../../server/repository.js';
-
-/** Фиксированное «сейчас» сида: тесты не должны зависеть от реального времени. */
-const SEEDED_AT = new Date('2026-03-01T12:00:00.000Z');
-const iso = (offsetDays: number): string =>
-  new Date(SEEDED_AT.getTime() + offsetDays * MS_IN_DAY).toISOString();
+import { iso, SEEDED_AT, useDatabase } from './helpers.js';
 
 function boardOf(body: unknown): BoardDto {
   return (body as { board: BoardDto }).board;
@@ -41,19 +33,10 @@ function laptop(board: BoardDto, id: string) {
 }
 
 describe('API доски', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   it('GET возвращает все ноутбуки с историей и пустым аудитом', () => {
-    const response = getBoard(db);
+    const response = getBoard(context.db);
     const board = response.body as BoardDto;
 
     expect(response.status).toBe(200);
@@ -64,7 +47,7 @@ describe('API доски', () => {
   });
 
   it('даты в DTO — строки ISO-8601, а не объекты Date', () => {
-    const board = getBoard(db).body as BoardDto;
+    const board = getBoard(context.db).body as BoardDto;
     const entry = laptop(board, 'nb-003')?.history[0];
 
     expect(typeof entry?.at).toBe('string');
@@ -73,19 +56,10 @@ describe('API доски', () => {
 });
 
 describe('успешный переход', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   it('меняет статус, поднимает версию и дописывает журнал', () => {
-    const response = postTransition(db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
+    const response = postTransition(context.db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
     const updated = laptop(boardOf(response.body), 'nb-001');
 
     expect(response.status).toBe(200);
@@ -97,8 +71,8 @@ describe('успешный переход', () => {
   });
 
   it('пишет успех в аудит', () => {
-    postTransition(db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) });
-    const board = getBoard(db).body as BoardDto;
+    postTransition(context.db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) });
+    const board = getBoard(context.db).body as BoardDto;
 
     expect(board.attempts).toHaveLength(1);
     expect(board.attempts[0]).toMatchObject({
@@ -112,13 +86,13 @@ describe('успешный переход', () => {
 
   it('возврат внутри окна проходит', () => {
     // nb-003 продан за 3 дня до SEEDED_AT — срок ещё не истёк.
-    expect(postTransition(db, 'nb-003', { to: LaptopStatus.InStock, now: iso(0) }).status).toBe(
+    expect(postTransition(context.db, 'nb-003', { to: LaptopStatus.InStock, now: iso(0) }).status).toBe(
       200,
     );
   });
 
   it('без поля now используются часы сервера', () => {
-    const response = postTransition(db, 'nb-001', { to: LaptopStatus.Reserved });
+    const response = postTransition(context.db, 'nb-001', { to: LaptopStatus.Reserved });
 
     expect(response.status).toBe(200);
     const at = laptop(boardOf(response.body), 'nb-001')?.history[0]?.at ?? '';
@@ -127,16 +101,7 @@ describe('успешный переход', () => {
 });
 
 describe('отказы домена переводятся в коды HTTP', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   const cases: ReadonlyArray<{
     readonly name: string;
@@ -189,14 +154,14 @@ describe('отказы домена переводятся в коды HTTP', ()
   ];
 
   it.each(cases)('$name → $status $code', ({ id, to, nowDays, code, status }) => {
-    const response = postTransition(db, id, { to, now: iso(nowDays) });
+    const response = postTransition(context.db, id, { to, now: iso(nowDays) });
 
     expect(response.status).toBe(status);
     expect(errorOf(response.body).code).toBe(code);
   });
 
   it('при отказе состояние не меняется, но попытка попадает в аудит', () => {
-    const response = postTransition(db, 'nb-004', { to: LaptopStatus.InStock, now: iso(0) });
+    const response = postTransition(context.db, 'nb-004', { to: LaptopStatus.InStock, now: iso(0) });
     const board = boardOf(response.body);
 
     expect(laptop(board, 'nb-004')?.status).toBe('SOLD');
@@ -210,20 +175,20 @@ describe('отказы домена переводятся в коды HTTP', ()
   });
 
   it('при отказе возвращается актуальная доска — клиенту не нужен второй запрос', () => {
-    const response = postTransition(db, 'nb-001', { to: LaptopStatus.InStock, now: iso(0) });
+    const response = postTransition(context.db, 'nb-001', { to: LaptopStatus.InStock, now: iso(0) });
 
     expect(boardOf(response.body).laptops).toHaveLength(6);
   });
 
   it('невозможно определить дату продажи → 422', () => {
-    inTransaction(db, () =>
-      insertLaptop(db, {
+    inTransaction(context.db, () =>
+      insertLaptop(context.db, {
         laptop: createLaptop({ id: 'nb-mystery', status: LaptopStatus.Sold }),
         model: 'Импорт без истории',
       }),
     );
 
-    const response = postTransition(db, 'nb-mystery', { to: LaptopStatus.InStock, now: iso(0) });
+    const response = postTransition(context.db, 'nb-mystery', { to: LaptopStatus.InStock, now: iso(0) });
 
     expect(response.status).toBe(422);
     expect(errorOf(response.body).code).toBe('SALE_DATE_UNKNOWN');
@@ -253,19 +218,10 @@ describe('отказы домена переводятся в коды HTTP', ()
 });
 
 describe('разбор запроса', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   it('несуществующий ноутбук → 404', () => {
-    const response = postTransition(db, 'нет-такого', { to: LaptopStatus.Sold });
+    const response = postTransition(context.db, 'нет-такого', { to: LaptopStatus.Sold });
 
     expect(response.status).toBe(404);
     expect(errorOf(response.body).code).toBe('NOT_FOUND');
@@ -279,7 +235,7 @@ describe('разбор запроса', () => {
     ['now не дата', { to: 'SOLD', now: 'вчера' }],
     ['expectedVersion не целое', { to: 'SOLD', expectedVersion: 1.5 }],
   ])('%s → 400', (_name, body) => {
-    const response = postTransition(db, 'nb-001', body);
+    const response = postTransition(context.db, 'nb-001', body);
 
     expect(response.status).toBe(400);
     expect(errorOf(response.body).code).toBe('BAD_REQUEST');
@@ -287,21 +243,12 @@ describe('разбор запроса', () => {
 });
 
 describe('конкурентное изменение', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   it('устаревшая версия → 409 VERSION_CONFLICT с актуальной доской', () => {
     // Первая вкладка успевает.
     expect(
-      postTransition(db, 'nb-001', {
+      postTransition(context.db, 'nb-001', {
         to: LaptopStatus.Reserved,
         now: iso(0),
         expectedVersion: 1,
@@ -309,7 +256,7 @@ describe('конкурентное изменение', () => {
     ).toBe(200);
 
     // Вторая всё ещё думает, что версия 1.
-    const response = postTransition(db, 'nb-001', {
+    const response = postTransition(context.db, 'nb-001', {
       to: LaptopStatus.Sold,
       now: iso(0),
       expectedVersion: 1,
@@ -322,49 +269,38 @@ describe('конкурентное изменение', () => {
   });
 
   it('без expectedVersion изменение применяется к текущему состоянию', () => {
-    postTransition(db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
+    postTransition(context.db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
 
-    expect(postTransition(db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) }).status).toBe(200);
+    expect(postTransition(context.db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) }).status).toBe(200);
   });
 });
 
 describe('проверка живости', () => {
+  const context = useDatabase();
+
   it('здоровый сервис отвечает 200', () => {
-    const db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-
-    expect(getHealth(db)).toEqual({ status: 200, body: { ok: true } });
-
-    db.close();
+    expect(getHealth(context.db)).toEqual({ status: 200, body: { ok: true } });
   });
 
   it('недоступная база — это 503, а не «всё хорошо»', () => {
     // Сервис, который рапортует «жив» при мёртвой базе, вреднее молчащего:
     // балансировщик продолжит слать на него трафик.
-    const db = openDatabase(':memory:');
-    db.close();
+    context.db.close();
 
-    const response = getHealth(db);
+    const response = getHealth(context.db);
 
     expect(response.status).toBe(503);
     expect((response.body as { ok: boolean }).ok).toBe(false);
+
+    // Повторное закрытие в afterEach пройдёт без ошибки.
   });
 });
 
 describe('добавление ноутбука', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   it('создаёт ноутбук в начальном статусе с пустой историей', () => {
-    const response = postLaptop(db);
+    const response = postLaptop(context.db);
     const created = (response.body as { createdId: string }).createdId;
     const laptopDto = laptop(boardOf(response.body), created);
 
@@ -377,8 +313,8 @@ describe('добавление ноутбука', () => {
   });
 
   it('выдаёт следующий свободный номер, а не повторяет существующий', () => {
-    const first = (postLaptop(db).body as { createdId: string }).createdId;
-    const second = (postLaptop(db).body as { createdId: string }).createdId;
+    const first = (postLaptop(context.db).body as { createdId: string }).createdId;
+    const second = (postLaptop(context.db).body as { createdId: string }).createdId;
 
     // В сиде шесть ноутбуков — nb-001…nb-006.
     expect(first).toBe('nb-007');
@@ -389,56 +325,47 @@ describe('добавление ноутбука', () => {
   it('номер считается по числу, а не по строке', () => {
     // Десятый ноутбук не должен «потеряться» за nb-009 при сравнении строк.
     for (let index = 0; index < 4; index += 1) {
-      postLaptop(db);
+      postLaptop(context.db);
     }
-    expect((postLaptop(db).body as { createdId: string }).createdId).toBe('nb-011');
+    expect((postLaptop(context.db).body as { createdId: string }).createdId).toBe('nb-011');
   });
 
   it('название модели берётся из каталога детерминированно, если задать генератор', () => {
-    const response = postLaptop(db, () => 0);
+    const response = postLaptop(context.db, () => 0);
     const created = (response.body as { createdId: string }).createdId;
 
     expect(laptop(boardOf(response.body), created)?.model).toBe('Lenovo ThinkPad X1 Carbon');
   });
 
   it('новый ноутбук сразу подчиняется автомату', () => {
-    const created = (postLaptop(db).body as { createdId: string }).createdId;
+    const created = (postLaptop(context.db).body as { createdId: string }).createdId;
 
     // Со склада можно в бронь…
-    expect(postTransition(db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
+    expect(postTransition(context.db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
       200,
     );
     // …а в тот же статус — нет.
-    expect(postTransition(db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
+    expect(postTransition(context.db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
       409,
     );
   });
 
   it('после сброса нумерация начинается заново от сида', () => {
-    postLaptop(db);
-    postReset(db, SEEDED_AT);
+    postLaptop(context.db);
+    postReset(context.db, SEEDED_AT);
 
-    expect((postLaptop(db).body as { createdId: string }).createdId).toBe('nb-007');
+    expect((postLaptop(context.db).body as { createdId: string }).createdId).toBe('nb-007');
   });
 });
 
 describe('сброс', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-    seedDatabase(db, SEEDED_AT);
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase();
 
   it('возвращает доску в исходное состояние и чистит аудит', () => {
-    postTransition(db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
-    postTransition(db, 'nb-004', { to: LaptopStatus.InStock, now: iso(0) });
+    postTransition(context.db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
+    postTransition(context.db, 'nb-004', { to: LaptopStatus.InStock, now: iso(0) });
 
-    const response = postReset(db, SEEDED_AT);
+    const response = postReset(context.db, SEEDED_AT);
     const board = boardOf(response.body);
 
     expect(response.status).toBe(200);

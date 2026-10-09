@@ -3,6 +3,15 @@
  *
  * Точка входа. Экспорты перечислены явно, а не через `export *`: публичный API —
  * это решение, а не побочный эффект того, что лежит в файлах.
+ *
+ * Карта модулей:
+ *  - `status.ts`       — статусы и граф переходов («куда можно»);
+ *  - `rules.ts`        — условия на рёбрах («когда можно») и срок возврата;
+ *  - `laptop.ts`       — агрегат: создание, чтение даты продажи, запись в журнал;
+ *  - `changeStatus.ts` — движок, который сводит их вместе;
+ *  - `errors.ts`       — ошибки с кодом, русским текстом и деталями;
+ *  - `types.ts`        — типы домена и `Result`;
+ *  - `time.ts`         — общие операции с датами.
  */
 
 // --- Автомат: статусы и граф переходов ---
@@ -19,27 +28,29 @@ export {
   transitionKey,
   type AllowedTarget,
   type TerminalStatus,
-  type TransitionGraph,
   type TransitionKey,
 } from './status.js';
 
+// --- Условия на рёбрах ---
+export { RETURN_WINDOW_DAYS, returnDeadline } from './rules.js';
+
+// --- Агрегат ---
+export { createLaptop, resolveSaleDate, type CreateLaptopInput } from './laptop.js';
+
 // --- Операции ---
 export {
-  MS_IN_DAY,
-  RETURN_WINDOW_DAYS,
   availableTransitions,
   canChangeStatus,
   changeStatus,
   changeStatusOrThrow,
   changeStatusStrict,
-  createLaptop,
-  resolveSaleDate,
-  returnDeadline,
-  type CreateLaptopInput,
 } from './changeStatus.js';
 
 // --- Ошибки ---
 export { StatusTransitionError } from './errors.js';
+
+// --- Время ---
+export { MS_IN_DAY } from './time.js';
 
 // --- Типы домена ---
 export {

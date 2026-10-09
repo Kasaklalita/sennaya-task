@@ -1,14 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import {
-  changeStatus,
-  createLaptop,
-  isLaptopStatus,
-  type LaptopStatus,
-  type TransitionError,
-  type TransitionErrorCode,
-} from '../src/index.js';
+import { changeStatus, createLaptop, isLaptopStatus, type LaptopStatus } from '../src/index.js';
 import { inTransaction, resetDatabase } from './db.js';
+import {
+  httpStatusFor,
+  toAttemptDto,
+  toLaptopDto,
+  type BoardDto,
+} from './dto.js';
 import { randomModelName } from './catalog.js';
 import {
   applyTransition,
@@ -18,8 +17,6 @@ import {
   listLaptops,
   nextLaptopId,
   recordAttempt,
-  type AttemptRecord,
-  type LaptopRecord,
 } from './repository.js';
 import { buildSeed } from './seed.js';
 
@@ -31,66 +28,10 @@ import { buildSeed } from './seed.js';
  * сохранить результат и перевести ответ домена в код HTTP.
  */
 
-// --- DTO: то, что уходит по сети. Даты — строки ISO-8601 ---
-
-export interface StatusChangeDto {
-  readonly from: LaptopStatus;
-  readonly to: LaptopStatus;
-  readonly at: string;
-}
-
-export interface LaptopDto {
-  readonly id: string;
-  readonly model: string;
-  readonly status: LaptopStatus;
-  readonly version: number;
-  readonly soldAt: string | null;
-  readonly history: readonly StatusChangeDto[];
-}
-
-export interface AttemptDto {
-  readonly id: number;
-  readonly laptopId: string;
-  readonly from: LaptopStatus;
-  readonly to: LaptopStatus;
-  readonly ok: boolean;
-  readonly errorCode: TransitionErrorCode | null;
-  readonly message: string;
-  readonly modelNow: string;
-  readonly createdAt: string;
-}
-
-export interface BoardDto {
-  readonly laptops: readonly LaptopDto[];
-  readonly attempts: readonly AttemptDto[];
-}
-
+// Ответ обработчика до того, как его записали в сокет.
 export interface ApiResponse {
   readonly status: number;
   readonly body: unknown;
-}
-
-function toLaptopDto(record: LaptopRecord): LaptopDto {
-  return {
-    id: record.laptop.id,
-    model: record.model,
-    status: record.laptop.status,
-    version: record.version,
-    soldAt: record.laptop.soldAt === undefined ? null : record.laptop.soldAt.toISOString(),
-    history: record.laptop.history.map((change) => ({
-      from: change.from,
-      to: change.to,
-      at: change.at.toISOString(),
-    })),
-  };
-}
-
-function toAttemptDto(record: AttemptRecord): AttemptDto {
-  return {
-    ...record,
-    modelNow: record.modelNow.toISOString(),
-    createdAt: record.createdAt.toISOString(),
-  };
 }
 
 function readBoard(db: DatabaseSync): BoardDto {
@@ -98,30 +39,6 @@ function readBoard(db: DatabaseSync): BoardDto {
     laptops: listLaptops(db).map(toLaptopDto),
     attempts: listAttempts(db).map(toAttemptDto),
   };
-}
-
-/**
- * Код домена → код HTTP.
- *
- * `satisfies Record<TransitionErrorCode, number>` делает таблицу исчерпывающей:
- * новый код ошибки в домене сломает сборку здесь, а не тихо уедет в 500.
- *
- * 409 — нарушение бизнес-правила: запрос понятен и данные корректны, но
- * состояние ресурса его не допускает. 400 — испорченный ввод. 422 — данных
- * не хватает, чтобы правило вообще можно было проверить.
- */
-const HTTP_STATUS_BY_ERROR_CODE = {
-  UNKNOWN_STATUS: 400,
-  INVALID_DATE: 400,
-  SAME_STATUS: 409,
-  TERMINAL_STATUS: 409,
-  TRANSITION_NOT_ALLOWED: 409,
-  RETURN_WINDOW_EXPIRED: 409,
-  SALE_DATE_UNKNOWN: 422,
-} as const satisfies Record<TransitionErrorCode, number>;
-
-export function httpStatusFor(error: TransitionError): number {
-  return HTTP_STATUS_BY_ERROR_CODE[error.code];
 }
 
 // --- Разбор запроса ---
@@ -179,6 +96,11 @@ function parseTransitionRequest(body: unknown): ParseResult {
     },
   };
 }
+
+// DTO и таблица кодов живут в dto.ts; реэкспорт — чтобы у потребителей
+// была одна точка входа в серверный API.
+export { httpStatusFor } from './dto.js';
+export type { AttemptDto, BoardDto, LaptopDto, StatusChangeDto } from './dto.js';
 
 // --- Обработчики ---
 

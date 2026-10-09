@@ -1,4 +1,11 @@
-import { ALL_STATUSES, changeStatus, type Laptop, type LaptopStatus, type TransitionError } from '@domain';
+import {
+  ALL_STATUSES,
+  MS_IN_DAY,
+  changeStatus,
+  type Laptop,
+  type LaptopStatus,
+  type TransitionError,
+} from '@domain';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -79,8 +86,6 @@ export interface BoardCallbacks {
   readonly onSuccess: (message: string) => void;
   readonly onFailure: (code: string, message: string) => void;
 }
-
-const MS_IN_DAY = 24 * 60 * 60 * 1000;
 
 export function useBoard(callbacks: BoardCallbacks): BoardController {
   const [board, setBoard] = useState<Board>({ laptops: [], attempts: [] });

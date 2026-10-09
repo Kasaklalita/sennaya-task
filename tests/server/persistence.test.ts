@@ -1,13 +1,13 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LaptopStatus, changeStatusOrThrow, createLaptop } from '../../src/index.js';
 import { seedDatabase } from '../../server/api.js';
 import { inTransaction, openDatabase, resetDatabase } from '../../server/db.js';
+import { useDatabase } from './helpers.js';
 import {
   applyTransition,
   getLaptop,
@@ -24,21 +24,13 @@ function sold(id: string, at: Date = SALE_DATE) {
 }
 
 describe('хранение', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase({ seeded: false });
 
   it('агрегат переживает запись и чтение без потерь', () => {
     const laptop = sold('nb-1');
-    inTransaction(db, () => insertLaptop(db, { laptop, model: 'MacBook Pro 16"' }));
+    inTransaction(context.db, () => insertLaptop(context.db, { laptop, model: 'MacBook Pro 16"' }));
 
-    const loaded = getLaptop(db, 'nb-1');
+    const loaded = getLaptop(context.db, 'nb-1');
 
     expect(loaded?.model).toBe('MacBook Pro 16"');
     expect(loaded?.version).toBe(1);
@@ -49,9 +41,9 @@ describe('хранение', () => {
   });
 
   it('восстановленный из БД агрегат заморожен так же, как созданный в коде', () => {
-    inTransaction(db, () => insertLaptop(db, { laptop: sold('nb-1'), model: 'X' }));
+    inTransaction(context.db, () => insertLaptop(context.db, { laptop: sold('nb-1'), model: 'X' }));
 
-    const loaded = getLaptop(db, 'nb-1');
+    const loaded = getLaptop(context.db, 'nb-1');
 
     expect(Object.isFrozen(loaded?.laptop)).toBe(true);
     expect(Object.isFrozen(loaded?.laptop.history)).toBe(true);
@@ -63,22 +55,22 @@ describe('хранение', () => {
       status: LaptopStatus.Sold,
       soldAt: SALE_DATE,
     });
-    inTransaction(db, () => insertLaptop(db, { laptop: imported, model: 'Legacy' }));
+    inTransaction(context.db, () => insertLaptop(context.db, { laptop: imported, model: 'Legacy' }));
 
-    expect(getLaptop(db, 'nb-legacy')?.laptop.soldAt).toEqual(SALE_DATE);
+    expect(getLaptop(context.db, 'nb-legacy')?.laptop.soldAt).toEqual(SALE_DATE);
   });
 
   it('отсутствующий ноутбук — это undefined, а не исключение', () => {
-    expect(getLaptop(db, 'нет такого')).toBeUndefined();
+    expect(getLaptop(context.db, 'нет такого')).toBeUndefined();
   });
 
   it('listLaptops раскладывает историю по своим ноутбукам', () => {
-    inTransaction(db, () => {
-      insertLaptop(db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' });
-      insertLaptop(db, { laptop: sold('nb-2'), model: 'B' });
+    inTransaction(context.db, () => {
+      insertLaptop(context.db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' });
+      insertLaptop(context.db, { laptop: sold('nb-2'), model: 'B' });
     });
 
-    const all = listLaptops(db);
+    const all = listLaptops(context.db);
 
     expect(all.map((record) => record.laptop.id).sort()).toEqual(['nb-1', 'nb-2']);
     expect(all.find((r) => r.laptop.id === 'nb-1')?.laptop.history).toHaveLength(0);
@@ -87,15 +79,10 @@ describe('хранение', () => {
 });
 
 describe('инварианты на уровне СУБД', () => {
-  let db: DatabaseSync;
+  const context = useDatabase({ seeded: false });
 
   beforeEach(() => {
-    db = openDatabase(':memory:');
-    inTransaction(db, () => insertLaptop(db, { laptop: sold('nb-1'), model: 'A' }));
-  });
-
-  afterEach(() => {
-    db.close();
+    inTransaction(context.db, () => insertLaptop(context.db, { laptop: sold('nb-1'), model: 'A' }));
   });
 
   /**
@@ -104,24 +91,24 @@ describe('инварианты на уровне СУБД', () => {
    */
   it('запись журнала невозможно изменить', () => {
     expect(() =>
-      db.prepare("UPDATE status_history SET to_status = 'WRITTEN_OFF'").run(),
+      context.db.prepare("UPDATE status_history SET to_status = 'WRITTEN_OFF'").run(),
     ).toThrow(/только дописывается/);
   });
 
   it('запись журнала невозможно удалить', () => {
-    expect(() => db.prepare('DELETE FROM status_history').run()).toThrow(/только дописывается/);
-    expect(db.prepare('SELECT count(*) AS c FROM status_history').get()).toEqual({ c: 1 });
+    expect(() => context.db.prepare('DELETE FROM status_history').run()).toThrow(/только дописывается/);
+    expect(context.db.prepare('SELECT count(*) AS c FROM status_history').get()).toEqual({ c: 1 });
   });
 
   it('статус вне перечисления в базу не попадёт', () => {
     expect(() =>
-      db.prepare("UPDATE laptops SET status = 'СЛОМАН' WHERE id = 'nb-1'").run(),
+      context.db.prepare("UPDATE laptops SET status = 'СЛОМАН' WHERE id = 'nb-1'").run(),
     ).toThrow(/CHECK/i);
   });
 
   it('переход в тот же статус в журнал не попадёт', () => {
     expect(() =>
-      db
+      context.db
         .prepare(
           `INSERT INTO status_history (laptop_id, from_status, to_status, changed_at)
            VALUES ('nb-1', 'SOLD', 'SOLD', '2026-01-19T10:00:00.000Z')`,
@@ -132,7 +119,7 @@ describe('инварианты на уровне СУБД', () => {
 
   it('история без своего ноутбука невозможна — внешние ключи включены', () => {
     expect(() =>
-      db
+      context.db
         .prepare(
           `INSERT INTO status_history (laptop_id, from_status, to_status, changed_at)
            VALUES ('нет-такого', 'IN_STOCK', 'SOLD', '2026-01-19T10:00:00.000Z')`,
@@ -143,7 +130,7 @@ describe('инварианты на уровне СУБД', () => {
 
   it('отказ без кода ошибки в аудит не попадёт', () => {
     expect(() =>
-      db
+      context.db
         .prepare(
           `INSERT INTO transition_attempts
              (laptop_id, from_status, to_status, ok, error_code, message, model_now)
@@ -154,23 +141,18 @@ describe('инварианты на уровне СУБД', () => {
   });
 
   it('сброс очищает базу, несмотря на защиту журнала от удаления', () => {
-    resetDatabase(db);
+    resetDatabase(context.db);
 
-    expect(listLaptops(db)).toEqual([]);
-    expect(db.prepare('SELECT count(*) AS c FROM status_history').get()).toEqual({ c: 0 });
+    expect(listLaptops(context.db)).toEqual([]);
+    expect(context.db.prepare('SELECT count(*) AS c FROM status_history').get()).toEqual({ c: 0 });
   });
 });
 
 describe('повреждённые данные в хранилище', () => {
-  let db: DatabaseSync;
+  const context = useDatabase({ seeded: false });
 
   beforeEach(() => {
-    db = openDatabase(':memory:');
-    inTransaction(db, () => insertLaptop(db, { laptop: sold('nb-1'), model: 'A' }));
-  });
-
-  afterEach(() => {
-    db.close();
+    inTransaction(context.db, () => insertLaptop(context.db, { laptop: sold('nb-1'), model: 'A' }));
   });
 
   /**
@@ -180,108 +162,95 @@ describe('повреждённые данные в хранилище', () => {
    * (см. соответствующий разбор в README).
    */
   it('нечитаемая дата в журнале', () => {
-    db.prepare(
+    context.db.prepare(
       `INSERT INTO status_history (laptop_id, from_status, to_status, changed_at)
        VALUES ('nb-1', 'SOLD', 'IN_STOCK', 'не дата')`,
     ).run();
 
-    expect(() => getLaptop(db, 'nb-1')).toThrow(/Повреждённые данные/);
+    expect(() => getLaptop(context.db, 'nb-1')).toThrow(/Повреждённые данные/);
   });
 
   it('нечитаемая дата в soldAt', () => {
-    db.prepare("UPDATE laptops SET sold_at = 'не дата' WHERE id = 'nb-1'").run();
+    context.db.prepare("UPDATE laptops SET sold_at = 'не дата' WHERE id = 'nb-1'").run();
 
-    expect(() => getLaptop(db, 'nb-1')).toThrow(/laptops\.sold_at/);
+    expect(() => getLaptop(context.db, 'nb-1')).toThrow(/laptops\.sold_at/);
   });
 
   it('не строка в названии модели', () => {
     // Именно BLOB: у колонки TEXT-аффинность, поэтому число SQLite молча
     // привёл бы к строке, а BLOB оставляет как есть.
-    db.prepare("UPDATE laptops SET model = x'616263' WHERE id = 'nb-1'").run();
+    context.db.prepare("UPDATE laptops SET model = x'616263' WHERE id = 'nb-1'").run();
 
-    expect(() => getLaptop(db, 'nb-1')).toThrow(/laptops\.model/);
+    expect(() => getLaptop(context.db, 'nb-1')).toThrow(/laptops\.model/);
   });
 
   it('не число в версии', () => {
-    db.prepare("UPDATE laptops SET version = 'абв' WHERE id = 'nb-1'").run();
+    context.db.prepare("UPDATE laptops SET version = 'абв' WHERE id = 'nb-1'").run();
 
-    expect(() => getLaptop(db, 'nb-1')).toThrow(/laptops\.version/);
+    expect(() => getLaptop(context.db, 'nb-1')).toThrow(/laptops\.version/);
   });
 
   it('статус вне перечисления, если ограничение СУБД обойдено', () => {
     // PRAGMA позволяет сымитировать то, что иначе защищено CHECK: строку,
     // попавшую в базу мимо приложения.
-    db.exec('PRAGMA ignore_check_constraints = ON');
-    db.prepare("UPDATE laptops SET status = 'СЛОМАН' WHERE id = 'nb-1'").run();
+    context.db.exec('PRAGMA ignore_check_constraints = ON');
+    context.db.prepare("UPDATE laptops SET status = 'СЛОМАН' WHERE id = 'nb-1'").run();
 
-    expect(() => getLaptop(db, 'nb-1')).toThrow(/laptops\.status/);
+    expect(() => getLaptop(context.db, 'nb-1')).toThrow(/laptops\.status/);
   });
 
   it('битая запись в аудите тоже не проходит молча', () => {
-    db.prepare(
+    context.db.prepare(
       `INSERT INTO transition_attempts
          (laptop_id, from_status, to_status, ok, error_code, message, model_now)
        VALUES ('nb-1', 'SOLD', 'IN_STOCK', 0, 'SAME_STATUS', 'текст', 'не дата')`,
     ).run();
 
-    expect(() => listAttempts(db)).toThrow(/model_now/);
+    expect(() => listAttempts(context.db)).toThrow(/model_now/);
   });
 });
 
 describe('транзакции', () => {
-  let db: DatabaseSync;
-
-  beforeEach(() => {
-    db = openDatabase(':memory:');
-  });
-
-  afterEach(() => {
-    db.close();
-  });
+  const context = useDatabase({ seeded: false });
 
   it('при ошибке внутри транзакции откатывается всё', () => {
     expect(() =>
-      inTransaction(db, () => {
-        insertLaptop(db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' });
+      inTransaction(context.db, () => {
+        insertLaptop(context.db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' });
         throw new Error('что-то пошло не так на полпути');
       }),
     ).toThrow('что-то пошло не так на полпути');
 
     // Ноутбук не должен остаться записанным наполовину.
-    expect(listLaptops(db)).toEqual([]);
+    expect(listLaptops(context.db)).toEqual([]);
   });
 
   it('успешная транзакция возвращает результат работы', () => {
-    const result = inTransaction(db, () => {
-      insertLaptop(db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' });
+    const result = inTransaction(context.db, () => {
+      insertLaptop(context.db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' });
       return 'готово';
     });
 
     expect(result).toBe('готово');
-    expect(listLaptops(db)).toHaveLength(1);
+    expect(listLaptops(context.db)).toHaveLength(1);
   });
 });
 
 describe('оптимистическая блокировка', () => {
-  let db: DatabaseSync;
+  const context = useDatabase({ seeded: false });
 
   beforeEach(() => {
-    db = openDatabase(':memory:');
-    inTransaction(db, () =>
-      insertLaptop(db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' }),
+    inTransaction(context.db, () =>
+      insertLaptop(context.db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' }),
     );
   });
 
-  afterEach(() => {
-    db.close();
-  });
-
   it('успешная запись поднимает версию и дописывает журнал', () => {
-    const record = getLaptop(db, 'nb-1');
+    const record = getLaptop(context.db, 'nb-1');
     const next = changeStatusOrThrow(record!.laptop, LaptopStatus.Reserved, { now: SALE_DATE });
 
-    const applied = inTransaction(db, () =>
-      applyTransition(db, {
+    const applied = inTransaction(context.db, () =>
+      applyTransition(context.db, {
         id: 'nb-1',
         expectedVersion: record!.version,
         next,
@@ -290,7 +259,7 @@ describe('оптимистическая блокировка', () => {
     );
 
     expect(applied).toBe(true);
-    const reloaded = getLaptop(db, 'nb-1');
+    const reloaded = getLaptop(context.db, 'nb-1');
     expect(reloaded?.version).toBe(2);
     expect(reloaded?.laptop.status).toBe('RESERVED');
     expect(reloaded?.laptop.history).toHaveLength(1);
@@ -301,12 +270,12 @@ describe('оптимистическая блокировка', () => {
    * Второе не должно молча затереть первое.
    */
   it('устаревшая версия не затирает чужое изменение', () => {
-    const stale = getLaptop(db, 'nb-1')!;
+    const stale = getLaptop(context.db, 'nb-1')!;
 
     // Первая вкладка успевает.
     const first = changeStatusOrThrow(stale.laptop, LaptopStatus.Reserved, { now: SALE_DATE });
-    inTransaction(db, () =>
-      applyTransition(db, {
+    inTransaction(context.db, () =>
+      applyTransition(context.db, {
         id: 'nb-1',
         expectedVersion: stale.version,
         next: first,
@@ -316,8 +285,8 @@ describe('оптимистическая блокировка', () => {
 
     // Вторая всё ещё думает, что версия 1.
     const second = changeStatusOrThrow(stale.laptop, LaptopStatus.Sold, { now: SALE_DATE });
-    const applied = inTransaction(db, () =>
-      applyTransition(db, {
+    const applied = inTransaction(context.db, () =>
+      applyTransition(context.db, {
         id: 'nb-1',
         expectedVersion: stale.version,
         next: second,
@@ -327,7 +296,7 @@ describe('оптимистическая блокировка', () => {
 
     expect(applied).toBe(false);
 
-    const reloaded = getLaptop(db, 'nb-1');
+    const reloaded = getLaptop(context.db, 'nb-1');
     expect(reloaded?.laptop.status).toBe('RESERVED');
     expect(reloaded?.version).toBe(2);
     // И в журнал ничего лишнего не дописалось.
@@ -336,22 +305,17 @@ describe('оптимистическая блокировка', () => {
 });
 
 describe('аудит попыток', () => {
-  let db: DatabaseSync;
+  const context = useDatabase({ seeded: false });
 
   beforeEach(() => {
-    db = openDatabase(':memory:');
-    inTransaction(db, () =>
-      insertLaptop(db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' }),
+    inTransaction(context.db, () =>
+      insertLaptop(context.db, { laptop: createLaptop({ id: 'nb-1' }), model: 'A' }),
     );
   });
 
-  afterEach(() => {
-    db.close();
-  });
-
   it('хранит и успехи, и отказы, новые сверху', () => {
-    inTransaction(db, () => {
-      recordAttempt(db, {
+    inTransaction(context.db, () => {
+      recordAttempt(context.db, {
         laptopId: 'nb-1',
         from: 'IN_STOCK',
         to: 'RESERVED',
@@ -360,7 +324,7 @@ describe('аудит попыток', () => {
         message: 'ок',
         modelNow: SALE_DATE,
       });
-      recordAttempt(db, {
+      recordAttempt(context.db, {
         laptopId: 'nb-1',
         from: 'IN_STOCK',
         to: 'IN_STOCK',
@@ -371,7 +335,7 @@ describe('аудит попыток', () => {
       });
     });
 
-    const attempts = listAttempts(db);
+    const attempts = listAttempts(context.db);
 
     expect(attempts).toHaveLength(2);
     expect(attempts[0]?.ok).toBe(false);

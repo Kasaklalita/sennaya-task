@@ -1,177 +1,40 @@
 /**
- * Движок конечного автомата: смена статуса ноутбука.
+ * Движок конечного автомата.
  *
- * Разделение ответственности:
- *  - `ALLOWED_TRANSITIONS` (status.ts) отвечает на вопрос «куда можно» — структура графа;
- *  - `GUARDS` (здесь) отвечает на вопрос «когда можно» — условия на ребре;
- *  - `changeStatus` — универсальный движок, который про конкретные правила ничего не знает.
+ * Про конкретные правила этот файл не знает ничего — и это проверяемо: ниже нет
+ * ни упоминания четырнадцати дней, ни одного статуса, кроме как в типах.
+ * Движок задаёт четыре вопроса и исполняет ответы:
  *
- * Поэтому новое правило («нельзя бронировать дольше 3 дней», «списание только
- * со склада») добавляется данными — ребром в графе или guard'ом в карте, — а тело
- * `changeStatus` остаётся неизменным.
+ *  1. это вообще статусы?            — `isLaptopStatus` (status.ts)
+ *  2. куда можно из текущего?        — граф `ALLOWED_TRANSITIONS` (status.ts)
+ *  3. выполнено ли условие ребра?    — карта `GUARDS` (rules.ts)
+ *  4. как дописать журнал?           — `appendChange` (laptop.ts)
+ *
+ * Поэтому новое правило добавляется данными — ребром в графе или условием
+ * в карте, — а тело `changeStatus` остаётся неизменным.
  */
 
 import {
-  INITIAL_STATUS,
   LaptopStatus,
   allowedTransitionsFrom,
   isLaptopStatus,
   isTerminalStatus,
   transitionKey,
   type AllowedTarget,
-  type TransitionKey,
 } from './status.js';
 import {
   StatusTransitionError,
   invalidNow,
-  invalidSaleDate,
   nowBeforeLastChange,
-  nowBeforeSale,
-  returnWindowExpired,
-  saleDateUnknown,
   sameStatus,
   terminalStatus,
   transitionNotAllowed,
   unknownStatus,
 } from './errors.js';
-import type {
-  ChangeStatusOptions,
-  Laptop,
-  Result,
-  StatusChange,
-  TransitionError,
-} from './types.js';
-
-/** Срок возврата из ТЗ: «не позднее 14 дней после продажи». */
-export const RETURN_WINDOW_DAYS = 14;
-
-export const MS_IN_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * Окно возврата считается фиксированными сутками (14 × 24 ч), а не календарными днями.
- *
- * Календарный вариант потребовал бы политики таймзоны («день» у склада в Москве и у
- * покупателя в Калининграде разный) и ломался бы на переходах на летнее время. В ТЗ
- * таймзона не задана, поэтому выбран детерминированный вариант; он же единственный,
- * который можно однозначно закрепить тестами. Подробнее — в README.
- */
-const RETURN_WINDOW_MS = RETURN_WINDOW_DAYS * MS_IN_DAY;
-
-function ok<T>(value: T): Result<T, never> {
-  return { ok: true, value };
-}
-
-function err<E>(error: E): Result<never, E> {
-  return { ok: false, error };
-}
-
-/**
- * Проверяет, что перед нами именно живая дата.
- *
- * Принимает `unknown`, а не `Date`, намеренно: на границе системы (JSON из запроса,
- * строка из БД) в поле типа `Date` вполне может оказаться строка — типы в рантайме
- * не существуют. `new Date('не дата')` тоже валиден по типу, но содержит `NaN`.
- */
-function isValidDate(value: unknown): value is Date {
-  return value instanceof Date && !Number.isNaN(value.getTime());
-}
-
-/** Копия записи журнала с копией даты — чтобы на вход нельзя было подсунуть алиас. */
-function cloneChange(change: StatusChange): StatusChange {
-  return Object.freeze({
-    from: change.from,
-    to: change.to,
-    at: new Date(change.at.getTime()),
-  });
-}
-
-/**
- * Определяет дату продажи.
- *
- * Приоритет у истории: она — единственный источник истины, и при нескольких циклах
- * «продан → возврат → продан снова» окно должно считаться от **последней** продажи.
- * Отдельное поле `soldAt` поддерживается только как запасной источник для записей,
- * импортированных из внешней системы без истории, — иначе два источника даты
- * неизбежно рассинхронизируются.
- *
- * Если даты нет нигде — возвращается ошибка, а не «молчаливое разрешить/запретить»:
- * невозможность проверить правило это не то же самое, что нарушение правила.
- */
-export function resolveSaleDate(laptop: Laptop): Result<Date, TransitionError> {
-  const lastSale = laptop.history.findLast((change) => change.to === LaptopStatus.Sold);
-
-  if (lastSale !== undefined) {
-    return isValidDate(lastSale.at)
-      ? ok(new Date(lastSale.at.getTime()))
-      : err(invalidSaleDate('history'));
-  }
-
-  if (laptop.soldAt !== undefined) {
-    return isValidDate(laptop.soldAt)
-      ? ok(new Date(laptop.soldAt.getTime()))
-      : err(invalidSaleDate('soldAt'));
-  }
-
-  return err(saleDateUnknown());
-}
-
-/**
- * Условие на ребре графа. Возвращает `null`, если переход разрешён, иначе — ошибку.
- */
-type Guard = (laptop: Laptop, now: Date) => TransitionError | null;
-
-/** «Продан → На складе»: возврат не позднее 14 дней после продажи. */
-const returnWindowGuard: Guard = (laptop, now) => {
-  const sale = resolveSaleDate(laptop);
-  if (!sale.ok) {
-    return sale.error;
-  }
-
-  const soldAt = sale.value;
-  const msElapsed = now.getTime() - soldAt.getTime();
-
-  // Отрицательное время — это не «успели вернуть», а испорченные данные
-  // или рассинхрон часов. Такое надо показывать, а не тихо разрешать возврат.
-  if (msElapsed < 0) {
-    return nowBeforeSale(now, soldAt);
-  }
-
-  // Граница включительна: «не позднее 14 дней» читается как «≤ 14 дней»,
-  // поэтому ровно 14 суток — ещё можно, 14 суток + 1 мс — уже нет.
-  if (msElapsed > RETURN_WINDOW_MS) {
-    return returnWindowExpired({
-      soldAt,
-      now,
-      deadline: new Date(soldAt.getTime() + RETURN_WINDOW_MS),
-      windowDays: RETURN_WINDOW_DAYS,
-      msElapsed,
-      daysElapsed: msElapsed / MS_IN_DAY,
-    });
-  }
-
-  return null;
-};
-
-/** Условия на рёбрах. Рёбра без записи здесь разрешены безусловно. */
-const GUARDS: Partial<Record<TransitionKey, Guard>> = {
-  'SOLD->IN_STOCK': returnWindowGuard,
-};
-
-function appendChange(laptop: Laptop, from: LaptopStatus, to: LaptopStatus, now: Date): Laptop {
-  const change: StatusChange = Object.freeze({
-    from,
-    to,
-    // Копия: если вызывающий потом поменяет переданный ему объект `now`,
-    // запись в журнале не должна «поехать».
-    at: new Date(now.getTime()),
-  });
-
-  return Object.freeze({
-    ...laptop,
-    status: to,
-    history: Object.freeze([...laptop.history, change]),
-  });
-}
+import { appendChange } from './laptop.js';
+import { GUARDS } from './rules.js';
+import { isValidDate } from './time.js';
+import { err, ok, type ChangeStatusOptions, type Laptop, type Result, type TransitionError } from './types.js';
 
 /**
  * Меняет статус ноутбука.
@@ -186,12 +49,12 @@ function appendChange(laptop: Laptop, from: LaptopStatus, to: LaptopStatus, now:
  * от самых грубых нарушений к самым тонким:
  *
  *   1. `UNKNOWN_STATUS` — значения вообще не из перечисления;
- *   2. `INVALID_DATE` — непригодные часы;
+ *   2. `INVALID_DATE` — непригодные часы или запись задним числом;
  *   3. `SAME_STATUS` — переход в тот же статус (частая ошибка интеграции,
  *      поэтому отдельное понятное сообщение, а не общее «переход запрещён»);
  *   4. `TERMINAL_STATUS` — уход из конечного статуса;
  *   5. `TRANSITION_NOT_ALLOWED` — ребра нет в графе;
- *   6. guard — ребро есть, но условие не выполнено.
+ *   6. условие на ребре — ребро есть, но оно не выполнено.
  *
  * @example
  * ```ts
@@ -293,7 +156,7 @@ export function changeStatusOrThrow(
   return result.value;
 }
 
-/** Возможен ли переход прямо сейчас — с учётом guard'ов. */
+/** Возможен ли переход прямо сейчас — с учётом условий на рёбрах. */
 export function canChangeStatus(
   laptop: Laptop,
   to: LaptopStatus,
@@ -303,7 +166,7 @@ export function canChangeStatus(
 }
 
 /**
- * Переходы, доступные **фактически**: ребро есть в графе и guard пропускает.
+ * Переходы, доступные **фактически**: ребро есть в графе и условие пропускает.
  *
  * Отличается от `allowedTransitionsFrom()`, которая смотрит только на структуру графа.
  * Нужна интерфейсу: проданный ноутбук на 20-й день формально имеет ребро «На складе»,
@@ -316,43 +179,4 @@ export function availableTransitions(
   return allowedTransitionsFrom(laptop.status).filter((to) =>
     canChangeStatus(laptop, to, options),
   );
-}
-
-/**
- * До какого момента включительно возможен возврат, или `null`, если вопрос
- * неприменим (ноутбук не продан) либо дату продажи определить нельзя.
- */
-export function returnDeadline(laptop: Laptop): Date | null {
-  if (laptop.status !== LaptopStatus.Sold) {
-    return null;
-  }
-
-  const sale = resolveSaleDate(laptop);
-  if (!sale.ok) {
-    return null;
-  }
-
-  return new Date(sale.value.getTime() + RETURN_WINDOW_MS);
-}
-
-export interface CreateLaptopInput {
-  readonly id: string;
-  /** По умолчанию {@link INITIAL_STATUS} — новый ноутбук приезжает на склад. */
-  readonly status?: LaptopStatus;
-  readonly history?: readonly StatusChange[];
-  /** Дата продажи для записей, импортированных без истории. */
-  readonly soldAt?: Date;
-}
-
-/**
- * Конструктор ноутбука: замораживает результат и копирует все даты,
- * чтобы внешние объекты не оставались алиасами внутреннего состояния.
- */
-export function createLaptop(input: CreateLaptopInput): Laptop {
-  return Object.freeze({
-    id: input.id,
-    status: input.status ?? INITIAL_STATUS,
-    history: Object.freeze((input.history ?? []).map(cloneChange)),
-    ...(input.soldAt === undefined ? {} : { soldAt: new Date(input.soldAt.getTime()) }),
-  });
 }

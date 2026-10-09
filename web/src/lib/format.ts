@@ -19,7 +19,7 @@ export function formatDateTime(date: Date): string {
 }
 
 /** Склонение «день / дня / дней» — тоже забота интерфейса, а не домена. */
-export function pluralizeDays(count: number): string {
+function pluralizeDays(count: number): string {
   const mod10 = count % 10;
   const mod100 = count % 100;
 

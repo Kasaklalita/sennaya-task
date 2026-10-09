@@ -58,7 +58,7 @@ export const ALLOWED_TRANSITIONS = {
   IN_STOCK: ['RESERVED', 'SOLD', 'WRITTEN_OFF'],
   RESERVED: ['IN_STOCK', 'SOLD'],
   // Возврат разрешён не всегда — ограничение по сроку живёт в guard'е перехода,
-  // см. GUARDS в changeStatus.ts. Граф отвечает за «куда можно», guard — за «когда можно».
+  // см. GUARDS в rules.ts. Граф отвечает за «куда можно», условие — за «когда можно».
   SOLD: ['IN_STOCK'],
   WRITTEN_OFF: [],
 } as const satisfies Record<LaptopStatus, readonly LaptopStatus[]>;
