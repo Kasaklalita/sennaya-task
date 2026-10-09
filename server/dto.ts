@@ -40,10 +40,32 @@ export interface AttemptDto {
   readonly createdAt: string;
 }
 
+/**
+ * Страница журнала.
+ *
+ * `total` обязателен: без него клиент не отличить «это всё» от «тут ещё есть,
+ * но мы вам не сказали». Молчаливое обрезание — это обман.
+ *
+ * `limit` возвращать фактический: если клиент попросить больше потолка,
+ * сервер срезать, и клиент должен об этом узнать, а не догадываться.
+ */
+export interface AttemptsPageDto {
+  readonly items: readonly AttemptDto[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
 export interface BoardDto {
   readonly laptops: readonly LaptopDto[];
-  readonly attempts: readonly AttemptDto[];
+  readonly attempts: AttemptsPageDto;
 }
+
+/** Сколько записей отдавать, если клиент не попросил иначе. */
+export const DEFAULT_ATTEMPTS_LIMIT = 20;
+
+/** Потолок. Больше за один запрос не отдавать даже по просьбе. */
+export const MAX_ATTEMPTS_LIMIT = 100;
 
 export function toLaptopDto(record: LaptopRecord): LaptopDto {
   return {

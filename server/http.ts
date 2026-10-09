@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { DatabaseSync } from 'node:sqlite';
 
 import {
+  getAttempts,
   getBoard,
   getHealth,
   postLaptop,
@@ -93,7 +94,8 @@ export async function handleRequest(
   options: ServerOptions = {},
 ): Promise<void> {
   const method = request.method ?? 'GET';
-  const path = new URL(request.url ?? '/', 'http://localhost').pathname;
+  const url = new URL(request.url ?? '/', 'http://localhost');
+  const path = url.pathname;
 
   try {
     if (method === 'GET' && path === '/api/health') {
@@ -103,6 +105,11 @@ export async function handleRequest(
 
     if (method === 'GET' && path === '/api/board') {
       send(response, getBoard(db));
+      return;
+    }
+
+    if (method === 'GET' && path === '/api/attempts') {
+      send(response, getAttempts(db, url.searchParams));
       return;
     }
 

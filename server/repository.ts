@@ -221,10 +221,27 @@ export function recordAttempt(
   );
 }
 
-export function listAttempts(db: DatabaseSync, limit = 100): readonly AttemptRecord[] {
+/** Сколько всего попыток лежать в базе. Нужно, чтобы листание знало свой размер. */
+export function countAttempts(db: DatabaseSync): number {
+  const row = db.prepare('SELECT count(*) AS total FROM transition_attempts').get() as
+    | Row
+    | undefined;
+  return row === undefined ? 0 : readInteger(row['total'], 'transition_attempts.total');
+}
+
+/**
+ * Страница журнала попыток, новые сверху.
+ *
+ * Отдавать страницу, а не «последние сто»: сто — это молчаливое обрезание.
+ * Записи сто первая и дальше просто пропадать, и никто об этом не узнать.
+ */
+export function listAttempts(
+  db: DatabaseSync,
+  page: { readonly limit?: number; readonly offset?: number } = {},
+): readonly AttemptRecord[] {
   const rows = db
-    .prepare('SELECT * FROM transition_attempts ORDER BY id DESC LIMIT ?')
-    .all(limit) as Row[];
+    .prepare('SELECT * FROM transition_attempts ORDER BY id DESC LIMIT ? OFFSET ?')
+    .all(page.limit ?? 20, page.offset ?? 0) as Row[];
 
   return rows.map((row) => {
     const errorCode = row['error_code'];

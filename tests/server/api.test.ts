@@ -8,6 +8,7 @@ import {
   type TransitionError,
 } from '../../src/index.js';
 import {
+  getAttempts,
   getBoard,
   getHealth,
   httpStatusFor,
@@ -41,7 +42,8 @@ describe('API доски', () => {
 
     expect(response.status).toBe(200);
     expect(board.laptops).toHaveLength(6);
-    expect(board.attempts).toHaveLength(0);
+    expect(board.attempts.items).toHaveLength(0);
+    expect(board.attempts.total).toBe(0);
     expect(laptop(board, 'nb-001')?.status).toBe('IN_STOCK');
     expect(laptop(board, 'nb-006')?.history).toHaveLength(3);
   });
@@ -74,8 +76,8 @@ describe('успешный переход', () => {
     postTransition(context.db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) });
     const board = getBoard(context.db).body as BoardDto;
 
-    expect(board.attempts).toHaveLength(1);
-    expect(board.attempts[0]).toMatchObject({
+    expect(board.attempts.items).toHaveLength(1);
+    expect(board.attempts.items[0]).toMatchObject({
       laptopId: 'nb-001',
       from: 'IN_STOCK',
       to: 'SOLD',
@@ -167,7 +169,7 @@ describe('отказы домена переводятся в коды HTTP', ()
     expect(laptop(board, 'nb-004')?.status).toBe('SOLD');
     expect(laptop(board, 'nb-004')?.version).toBe(1);
     expect(laptop(board, 'nb-004')?.history).toHaveLength(1);
-    expect(board.attempts[0]).toMatchObject({
+    expect(board.attempts.items[0]).toMatchObject({
       laptopId: 'nb-004',
       ok: false,
       errorCode: 'RETURN_WINDOW_EXPIRED',
@@ -357,6 +359,108 @@ describe('добавление ноутбука', () => {
   });
 });
 
+describe('листание журнала попыток', () => {
+  const context = useDatabase();
+
+  /** Нашуметь в журнале: каждый вызов — отказ, он в журнал и попадать. */
+  function makeAttempts(count: number): void {
+    for (let index = 0; index < count; index += 1) {
+      postTransition(context.db, 'nb-001', { to: LaptopStatus.InStock, now: iso(0) });
+    }
+  }
+
+  const page = (query: string) =>
+    getAttempts(context.db, new URLSearchParams(query)).body as {
+      items: readonly { id: number }[];
+      total: number;
+      limit: number;
+      offset: number;
+    };
+
+  it('по умолчанию отдавать двадцать штук и ВСЕГДА говорить total', () => {
+    makeAttempts(45);
+    const first = page('');
+
+    expect(first.items).toHaveLength(20);
+    expect(first.limit).toBe(20);
+    expect(first.offset).toBe(0);
+    // Главное в пагинации. Без total клиент не отличить «это всё»
+    // от «тут ещё есть, но мы промолчали».
+    expect(first.total).toBe(45);
+  });
+
+  it('страницы не пересекаться и покрывать весь журнал', () => {
+    makeAttempts(45);
+
+    const ids = [page('limit=20&offset=0'), page('limit=20&offset=20'), page('limit=20&offset=40')]
+      .flatMap((p) => p.items.map((item) => item.id));
+
+    expect(ids).toHaveLength(45);
+    expect(new Set(ids).size).toBe(45);
+  });
+
+  it('новые сверху, и на второй странице тоже', () => {
+    makeAttempts(30);
+    const first = page('limit=10&offset=0');
+    const second = page('limit=10&offset=10');
+
+    const descending = (items: readonly { id: number }[]) =>
+      items.every((item, i, all) => i === 0 || (all[i - 1]?.id ?? 0) > item.id);
+
+    expect(descending(first.items)).toBe(true);
+    expect(descending(second.items)).toBe(true);
+    expect(first.items.at(-1)!.id).toBeGreaterThan(second.items[0]!.id);
+  });
+
+  it('offset за концом — пустая страница, а не ошибка', () => {
+    makeAttempts(5);
+    const beyond = page('offset=1000');
+
+    expect(beyond.items).toEqual([]);
+    expect(beyond.total).toBe(5);
+  });
+
+  it('пустой журнал тоже нормальная страница', () => {
+    const empty = page('');
+
+    expect(empty.items).toEqual([]);
+    expect(empty.total).toBe(0);
+  });
+
+  it('просьба больше потолка срезаться, и ответ честно говорить сколько дали', () => {
+    makeAttempts(150);
+    const greedy = page('limit=9999');
+
+    expect(greedy.items).toHaveLength(100);
+    // Клиент узнать фактический размер из ответа, а не догадываться.
+    expect(greedy.limit).toBe(100);
+    expect(greedy.total).toBe(150);
+  });
+
+  it.each([
+    ['limit не число', 'limit=abc'],
+    ['limit дробный', 'limit=1.5'],
+    ['limit нулевой', 'limit=0'],
+    ['limit отрицательный', 'limit=-5'],
+    ['offset не число', 'offset=xyz'],
+    ['offset отрицательный', 'offset=-1'],
+  ])('мусор в запросе — 400, а не тихая подмена: %s', (_name, query) => {
+    const response = getAttempts(context.db, new URLSearchParams(query));
+
+    expect(response.status).toBe(400);
+    expect(errorOf(response.body).code).toBe('BAD_REQUEST');
+  });
+
+  it('доска всегда отдавать первую страницу: новая запись легла сверху', () => {
+    makeAttempts(30);
+    const board = getBoard(context.db).body as BoardDto;
+
+    expect(board.attempts.items).toHaveLength(20);
+    expect(board.attempts.offset).toBe(0);
+    expect(board.attempts.total).toBe(30);
+  });
+});
+
 describe('сброс', () => {
   const context = useDatabase();
 
@@ -369,7 +473,8 @@ describe('сброс', () => {
 
     expect(response.status).toBe(200);
     expect(board.laptops).toHaveLength(6);
-    expect(board.attempts).toHaveLength(0);
+    expect(board.attempts.items).toHaveLength(0);
+    expect(board.attempts.total).toBe(0);
     expect(laptop(board, 'nb-001')?.status).toBe('IN_STOCK');
     expect(laptop(board, 'nb-001')?.version).toBe(1);
   });

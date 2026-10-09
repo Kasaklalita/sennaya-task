@@ -181,7 +181,11 @@ export function StatusBoard() {
         </TabsContent>
 
         <TabsContent value="log" className="m-0">
-          <EventLog entries={board.attempts} resolveModel={resolveModel} />
+          <EventLog
+            page={board.attempts}
+            resolveModel={resolveModel}
+            onGoTo={(offset) => void board.goToAttemptsPage(offset)}
+          />
         </TabsContent>
       </div>
     );
@@ -214,9 +218,10 @@ export function StatusBoard() {
           <TabsTrigger value="log">
             <ScrollTextIcon className="size-3.5" aria-hidden />
             Журнал попыток
-            {board.attempts.length > 0 && (
+            {/* Всего записей, а не размер страницы: иначе счётчик врать. */}
+            {board.attempts.total > 0 && (
               <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                {board.attempts.length}
+                {board.attempts.total}
               </span>
             )}
           </TabsTrigger>

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   addLaptop,
+  fetchAttempts,
   fetchBoard,
   moveLaptop,
   resetBoard,
@@ -74,6 +75,8 @@ export interface BoardController {
   readonly loadError: string | null;
   readonly move: (laptopId: string, to: LaptopStatus) => Promise<void>;
   readonly add: () => Promise<void>;
+  /** Перейти на страницу журнала. Доску при этом не трогать. */
+  readonly goToAttemptsPage: (offset: number) => Promise<void>;
   readonly reset: () => Promise<void>;
   readonly shiftClock: (days: number) => void;
   readonly setClock: (now: Date) => void;
@@ -87,7 +90,10 @@ export interface BoardCallbacks {
 }
 
 export function useBoard(callbacks: BoardCallbacks): BoardController {
-  const [board, setBoard] = useState<Board>({ laptops: [], attempts: [] });
+  const [board, setBoard] = useState<Board>({
+    laptops: [],
+    attempts: { items: [], total: 0, limit: 20, offset: 0 },
+  });
   const [offsetMs, setOffsetMs] = useState<number>(() => readStoredOffset());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -156,6 +162,19 @@ export function useBoard(callbacks: BoardCallbacks): BoardController {
     }
   }, [onSuccess, onFailure]);
 
+  const goToAttemptsPage = useCallback(
+    async (offset: number) => {
+      try {
+        const page = await fetchAttempts(board.attempts.limit, offset);
+        // Меняем только журнал: доска на другой вкладке и трогать её незачем.
+        setBoard((previous) => ({ ...previous, attempts: page }));
+      } catch (error) {
+        onFailure('NETWORK_ERROR', error instanceof Error ? error.message : String(error));
+      }
+    },
+    [board.attempts.limit, onFailure],
+  );
+
   const reset = useCallback(async () => {
     try {
       setBoard(await resetBoard());
@@ -194,6 +213,7 @@ export function useBoard(callbacks: BoardCallbacks): BoardController {
     loadError,
     move,
     add,
+    goToAttemptsPage,
     reset,
     shiftClock,
     setClock,

@@ -3,14 +3,18 @@ import type { DatabaseSync } from 'node:sqlite';
 import { changeStatus, createLaptop, isLaptopStatus, type LaptopStatus } from '../src/index.js';
 import { inTransaction, resetDatabase } from './db.js';
 import {
+  DEFAULT_ATTEMPTS_LIMIT,
+  MAX_ATTEMPTS_LIMIT,
   httpStatusFor,
   toAttemptDto,
   toLaptopDto,
+  type AttemptsPageDto,
   type BoardDto,
 } from './dto.js';
 import { randomModelName } from './catalog.js';
 import {
   applyTransition,
+  countAttempts,
   getLaptop,
   insertLaptop,
   listAttempts,
@@ -34,11 +38,77 @@ export interface ApiResponse {
   readonly body: unknown;
 }
 
+/**
+ * Страница журнала попыток.
+ *
+ * Запрошенный `limit` срезать потолком, а не отвергать: клиент всё равно
+ * узнать фактический размер из ответа. `offset` за концом списка — не ошибка,
+ * а пустая страница: так ведут себя все нормальные листалки.
+ */
+function readAttempts(db: DatabaseSync, page: PageRequest): AttemptsPageDto {
+  const limit = Math.min(page.limit, MAX_ATTEMPTS_LIMIT);
+  return {
+    items: listAttempts(db, { limit, offset: page.offset }).map(toAttemptDto),
+    total: countAttempts(db),
+    limit,
+    offset: page.offset,
+  };
+}
+
 function readBoard(db: DatabaseSync): BoardDto {
   return {
     laptops: listLaptops(db).map(toLaptopDto),
-    attempts: listAttempts(db).map(toAttemptDto),
+    // После любого изменения клиент оказываться на первой странице:
+    // новая запись легла сверху, и смотреть надо именно туда.
+    attempts: readAttempts(db, { limit: DEFAULT_ATTEMPTS_LIMIT, offset: 0 }),
   };
+}
+
+interface PageRequest {
+  readonly limit: number;
+  readonly offset: number;
+}
+
+type PageParseResult =
+  | { readonly ok: true; readonly value: PageRequest }
+  | { readonly ok: false; readonly message: string };
+
+/** Разбор `?limit=&offset=`. Пусто — умолчания, мусор — 400, а не тихая подмена. */
+export function parsePageQuery(params: URLSearchParams): PageParseResult {
+  const read = (name: string, fallback: number, min: number): number | string => {
+    const raw = params.get(name);
+    if (raw === null || raw === '') {
+      return fallback;
+    }
+    if (!/^\d+$/.test(raw)) {
+      return `Параметр "${name}" должен быть целым неотрицательным числом, получено "${raw}".`;
+    }
+    const value = Number(raw);
+    if (value < min) {
+      return `Параметр "${name}" должен быть не меньше ${min}.`;
+    }
+    return value;
+  };
+
+  const limit = read('limit', DEFAULT_ATTEMPTS_LIMIT, 1);
+  if (typeof limit === 'string') {
+    return { ok: false, message: limit };
+  }
+  const offset = read('offset', 0, 0);
+  if (typeof offset === 'string') {
+    return { ok: false, message: offset };
+  }
+
+  return { ok: true, value: { limit, offset } };
+}
+
+export function getAttempts(db: DatabaseSync, params: URLSearchParams): ApiResponse {
+  const parsed = parsePageQuery(params);
+  if (!parsed.ok) {
+    return { status: 400, body: { error: { code: 'BAD_REQUEST', message: parsed.message } } };
+  }
+
+  return { status: 200, body: readAttempts(db, parsed.value) };
 }
 
 // --- Разбор запроса ---

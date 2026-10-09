@@ -59,6 +59,45 @@ describe('HTTP', () => {
     expect(created?.model.length).toBeGreaterThan(0);
   });
 
+  it('GET /api/attempts листать журнал', async () => {
+    for (let i = 0; i < 25; i += 1) {
+      // Отказ: переход в тот же статус. Каждый попадать в журнал.
+      await fetch(`${context.baseUrl}/api/laptops/nb-001/status`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ to: 'IN_STOCK' }),
+      });
+    }
+
+    const firstResponse = await fetch(`${context.baseUrl}/api/attempts?limit=10&offset=0`);
+    const first = (await firstResponse.json()) as {
+      items: { id: number }[];
+      total: number;
+      limit: number;
+      offset: number;
+    };
+
+    expect(firstResponse.status).toBe(200);
+    expect(first.items).toHaveLength(10);
+    expect(first.total).toBe(25);
+
+    const lastResponse = await fetch(`${context.baseUrl}/api/attempts?limit=10&offset=20`);
+    const lastPage = (await lastResponse.json()) as { items: { id: number }[] };
+
+    // Хвост короче страницы — это нормально, а не ошибка.
+    expect(lastPage.items).toHaveLength(5);
+    const ids = new Set([...first.items, ...lastPage.items].map((i) => i.id));
+    expect(ids.size).toBe(15);
+  });
+
+  it('мусор в параметрах страницы → 400', async () => {
+    const response = await fetch(`${context.baseUrl}/api/attempts?limit=abc`);
+
+    expect(response.status).toBe(400);
+    const { error } = (await response.json()) as { error: { code: string } };
+    expect(error.code).toBe('BAD_REQUEST');
+  });
+
   it('POST /api/reset возвращает доску в исходное состояние', async () => {
     await fetch(`${context.baseUrl}/api/laptops/nb-001/status`, {
       method: 'POST',
@@ -71,7 +110,7 @@ describe('HTTP', () => {
     expect(response.status).toBe(200);
     const { board } = (await response.json()) as { board: BoardDto };
     expect(board.laptops.find((item) => item.id === 'nb-001')?.status).toBe('IN_STOCK');
-    expect(board.attempts).toHaveLength(0);
+    expect(board.attempts.items).toHaveLength(0);
   });
 
   it('битый JSON — это ошибка клиента, а не сбой сервера', async () => {

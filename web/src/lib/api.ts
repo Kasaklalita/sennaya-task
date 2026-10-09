@@ -27,9 +27,17 @@ export interface BoardLaptop {
   readonly version: number;
 }
 
+/** Страница журнала. `total` нужен, чтобы знать, сколько ещё впереди. */
+export interface AttemptsPage {
+  readonly items: readonly AttemptView[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
 export interface Board {
   readonly laptops: readonly BoardLaptop[];
-  readonly attempts: readonly AttemptView[];
+  readonly attempts: AttemptsPage;
 }
 
 export interface ApiError {
@@ -63,9 +71,16 @@ interface AttemptDto {
   readonly modelNow: string;
 }
 
+interface AttemptsPageDto {
+  readonly items: readonly AttemptDto[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
 interface BoardDto {
   readonly laptops: readonly LaptopDto[];
-  readonly attempts: readonly AttemptDto[];
+  readonly attempts: AttemptsPageDto;
 }
 
 function toBoardLaptop(dto: LaptopDto): BoardLaptop {
@@ -85,14 +100,30 @@ function toBoardLaptop(dto: LaptopDto): BoardLaptop {
   };
 }
 
+function toAttemptsPage(dto: AttemptsPageDto): AttemptsPage {
+  return {
+    ...dto,
+    items: dto.items.map((attempt) => ({ ...attempt, modelNow: new Date(attempt.modelNow) })),
+  };
+}
+
 function toBoard(dto: BoardDto): Board {
   return {
     laptops: dto.laptops.map(toBoardLaptop),
-    attempts: dto.attempts.map((attempt) => ({
-      ...attempt,
-      modelNow: new Date(attempt.modelNow),
-    })),
+    attempts: toAttemptsPage(dto.attempts),
   };
+}
+
+/** Страница журнала отдельным запросом — чтобы листать, не перезагружая доску. */
+export async function fetchAttempts(limit: number, offset: number): Promise<AttemptsPage> {
+  const response = await fetch(`/api/attempts?limit=${limit}&offset=${offset}`);
+  const body = await readJson(response);
+
+  if (!response.ok) {
+    throw new Error((body as { error?: ApiError }).error?.message ?? 'Не удалось загрузить журнал');
+  }
+
+  return toAttemptsPage(body as AttemptsPageDto);
 }
 
 async function readJson(response: Response): Promise<unknown> {
