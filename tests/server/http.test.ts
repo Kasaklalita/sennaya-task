@@ -69,6 +69,20 @@ describe('HTTP', () => {
     expect(error.code).toBe('RETURN_WINDOW_EXPIRED');
   });
 
+  it('POST /api/laptops добавляет ноутбук и отвечает 201', async () => {
+    const response = await fetch(`${baseUrl}/api/laptops`, { method: 'POST' });
+
+    expect(response.status).toBe(201);
+    const { board, createdId } = (await response.json()) as {
+      board: BoardDto;
+      createdId: string;
+    };
+    expect(board.laptops).toHaveLength(7);
+    const created = board.laptops.find((item) => item.id === createdId);
+    expect(created?.status).toBe('IN_STOCK');
+    expect(created?.model.length).toBeGreaterThan(0);
+  });
+
   it('POST /api/reset возвращает доску в исходное состояние', async () => {
     await fetch(`${baseUrl}/api/laptops/nb-001/status`, {
       method: 'POST',

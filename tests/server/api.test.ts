@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  INITIAL_STATUS,
   LaptopStatus,
   MS_IN_DAY,
   TransitionErrorCode,
@@ -12,6 +13,7 @@ import {
 import {
   getBoard,
   httpStatusFor,
+  postLaptop,
   postReset,
   postTransition,
   seedDatabase,
@@ -322,6 +324,77 @@ describe('конкурентное изменение', () => {
     postTransition(db, 'nb-001', { to: LaptopStatus.Reserved, now: iso(0) });
 
     expect(postTransition(db, 'nb-001', { to: LaptopStatus.Sold, now: iso(0) }).status).toBe(200);
+  });
+});
+
+describe('добавление ноутбука', () => {
+  let db: DatabaseSync;
+
+  beforeEach(() => {
+    db = openDatabase(':memory:');
+    seedDatabase(db, SEEDED_AT);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('создаёт ноутбук в начальном статусе с пустой историей', () => {
+    const response = postLaptop(db);
+    const created = (response.body as { createdId: string }).createdId;
+    const laptopDto = laptop(boardOf(response.body), created);
+
+    expect(response.status).toBe(201);
+    expect(laptopDto?.status).toBe(INITIAL_STATUS);
+    expect(laptopDto?.history).toEqual([]);
+    expect(laptopDto?.version).toBe(1);
+    expect(laptopDto?.soldAt).toBeNull();
+    expect(laptopDto?.model.length).toBeGreaterThan(0);
+  });
+
+  it('выдаёт следующий свободный номер, а не повторяет существующий', () => {
+    const first = (postLaptop(db).body as { createdId: string }).createdId;
+    const second = (postLaptop(db).body as { createdId: string }).createdId;
+
+    // В сиде шесть ноутбуков — nb-001…nb-006.
+    expect(first).toBe('nb-007');
+    expect(second).toBe('nb-008');
+    expect(new Set([first, second]).size).toBe(2);
+  });
+
+  it('номер считается по числу, а не по строке', () => {
+    // Десятый ноутбук не должен «потеряться» за nb-009 при сравнении строк.
+    for (let index = 0; index < 4; index += 1) {
+      postLaptop(db);
+    }
+    expect((postLaptop(db).body as { createdId: string }).createdId).toBe('nb-011');
+  });
+
+  it('название модели берётся из каталога детерминированно, если задать генератор', () => {
+    const response = postLaptop(db, () => 0);
+    const created = (response.body as { createdId: string }).createdId;
+
+    expect(laptop(boardOf(response.body), created)?.model).toBe('Lenovo ThinkPad X1 Carbon');
+  });
+
+  it('новый ноутбук сразу подчиняется автомату', () => {
+    const created = (postLaptop(db).body as { createdId: string }).createdId;
+
+    // Со склада можно в бронь…
+    expect(postTransition(db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
+      200,
+    );
+    // …а в тот же статус — нет.
+    expect(postTransition(db, created, { to: LaptopStatus.Reserved, now: iso(0) }).status).toBe(
+      409,
+    );
+  });
+
+  it('после сброса нумерация начинается заново от сида', () => {
+    postLaptop(db);
+    postReset(db, SEEDED_AT);
+
+    expect((postLaptop(db).body as { createdId: string }).createdId).toBe('nb-007');
   });
 });
 

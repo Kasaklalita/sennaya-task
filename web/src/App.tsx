@@ -27,7 +27,7 @@ export default function App() {
           <footer className="mt-8 flex items-center gap-2 text-[11px] text-muted-foreground">
             <WorkflowIcon className="size-3.5" aria-hidden />
             React + shadcn/ui + dnd-kit · API на node:http · хранение в node:sqlite.
-            Ноль рантайм-зависимостей, 164 теста.
+            Ноль рантайм-зависимостей, 171 тест.
           </footer>
         </div>
 
