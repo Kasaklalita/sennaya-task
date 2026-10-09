@@ -182,6 +182,28 @@ function parseTransitionRequest(body: unknown): ParseResult {
 
 // --- Обработчики ---
 
+/**
+ * Проверка живости для платформы.
+ *
+ * Делает тривиальный запрос к базе, а не просто возвращает 200: сервис,
+ * который отвечает «жив» при недоступной базе, бесполезен — балансировщик
+ * продолжит слать на него трафик.
+ */
+export function getHealth(db: DatabaseSync): ApiResponse {
+  try {
+    db.prepare('SELECT 1').get();
+    return { status: 200, body: { ok: true } };
+  } catch (error) {
+    return {
+      status: 503,
+      body: {
+        ok: false,
+        error: { code: 'DB_UNAVAILABLE', message: error instanceof Error ? error.message : '' },
+      },
+    };
+  }
+}
+
 export function getBoard(db: DatabaseSync): ApiResponse {
   return { status: 200, body: readBoard(db) };
 }

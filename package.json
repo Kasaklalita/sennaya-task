@@ -22,7 +22,7 @@
     "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "tsx watch --disable-warning=ExperimentalWarning server/index.ts",
     "dev:web": "vite",
-    "start": "node --disable-warning=ExperimentalWarning dist-server/index.js",
+    "start": "node --disable-warning=ExperimentalWarning dist-server/server/index.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",

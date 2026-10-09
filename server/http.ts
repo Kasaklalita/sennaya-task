@@ -1,7 +1,15 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { getBoard, postLaptop, postReset, postTransition, type ApiResponse } from './api.js';
+import {
+  getBoard,
+  getHealth,
+  postLaptop,
+  postReset,
+  postTransition,
+  type ApiResponse,
+} from './api.js';
+import { serveStatic } from './static.js';
 
 /** Защита от бесконечного тела запроса. Доска маленькая, мегабайт не бывает. */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -73,15 +81,29 @@ function send(response: ServerResponse, { status, body }: ApiResponse): void {
 
 const TRANSITION_ROUTE = /^\/api\/laptops\/([^/]+)\/status$/;
 
+export interface ServerOptions {
+  /**
+   * Каталог с собранным фронтендом. Не задан — сервер отдаёт только API,
+   * а статику в разработке раздаёт Vite.
+   */
+  readonly staticRoot?: string | undefined;
+}
+
 export async function handleRequest(
   db: DatabaseSync,
   request: IncomingMessage,
   response: ServerResponse,
+  options: ServerOptions = {},
 ): Promise<void> {
   const method = request.method ?? 'GET';
   const path = new URL(request.url ?? '/', 'http://localhost').pathname;
 
   try {
+    if (method === 'GET' && path === '/api/health') {
+      send(response, getHealth(db));
+      return;
+    }
+
     if (method === 'GET' && path === '/api/board') {
       send(response, getBoard(db));
       return;
@@ -110,6 +132,13 @@ export async function handleRequest(
       const laptopId = decodeURIComponent(transitionMatch[1] ?? '');
       send(response, postTransition(db, laptopId, await readJsonBody(request)));
       return;
+    }
+
+    // Не API — значит либо файл фронтенда, либо и правда ничего.
+    if (options.staticRoot !== undefined && !path.startsWith('/api/')) {
+      if (await serveStatic(options.staticRoot, request, response, path)) {
+        return;
+      }
     }
 
     send(response, {
@@ -141,8 +170,8 @@ export async function handleRequest(
   }
 }
 
-export function createApiServer(db: DatabaseSync): Server {
+export function createApiServer(db: DatabaseSync, options: ServerOptions = {}): Server {
   return createServer((request, response) => {
-    void handleRequest(db, request, response);
+    void handleRequest(db, request, response, options);
   });
 }

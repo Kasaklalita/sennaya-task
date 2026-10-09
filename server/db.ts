@@ -12,7 +12,18 @@ import { DROP_SQL, SCHEMA_SQL } from './schema.js';
  */
 export function openDatabase(location: string): DatabaseSync {
   if (location !== ':memory:') {
-    mkdirSync(dirname(location), { recursive: true });
+    try {
+      mkdirSync(dirname(location), { recursive: true });
+    } catch (error) {
+      // Самый вероятный сбой при деплое: том примонтирован, но процесс
+      // работает не от root и писать в точку монтирования не может.
+      // Голый EACCES об этом не рассказывает, а подсказка — рассказывает.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Не удалось подготовить каталог для базы (${dirname(location)}): ${reason}. ` +
+          'Проверьте права на точку монтирования тома или задайте DB_PATH в доступный каталог.',
+      );
+    }
   }
 
   const db = new DatabaseSync(location);
