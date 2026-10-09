@@ -9,9 +9,9 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { ALL_STATUSES, INITIAL_STATUS, isLaptopStatus } from '@domain';
+import { ALL_STATUSES, INITIAL_STATUS, RETURN_WINDOW_DAYS, isLaptopStatus } from '@domain';
 import { LayoutGridIcon, Loader2Icon, ScrollTextIcon, TriangleAlertIcon } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { ClockControl } from '@/components/ClockControl';
@@ -19,6 +19,7 @@ import { EventLog } from '@/components/EventLog';
 import { HistoryDialog } from '@/components/HistoryDialog';
 import { LaptopCardBody } from '@/components/LaptopCard';
 import { StatusColumn } from '@/components/StatusColumn';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { evaluateTargets, useBoard } from '@/lib/board';
@@ -91,17 +92,24 @@ export function StatusBoard() {
     void board.move(laptopId, target);
   }
 
+  /**
+   * Тело страницы.
+   *
+   * Вынесено в переменную, а не в ранний `return`, потому что шапка
+   * с заголовком и переключателем вкладок должна оставаться на месте
+   * и во время загрузки, и при ошибке.
+   */
+  let body: ReactNode;
+
   if (board.loading) {
-    return (
+    body = (
       <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
         <Loader2Icon className="size-4 animate-spin" aria-hidden />
         Загружаю доску из базы…
       </div>
     );
-  }
-
-  if (board.loadError !== null) {
-    return (
+  } else if (board.loadError !== null) {
+    body = (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-8 text-center">
         <TriangleAlertIcon className="size-6 text-rose-400" aria-hidden />
         <div>
@@ -117,37 +125,19 @@ export function StatusBoard() {
         </Button>
       </div>
     );
-  }
+  } else {
+    body = (
+      <div className="flex flex-col gap-4">
+        <ClockControl
+          now={board.now}
+          clockShifted={board.clockShifted}
+          onShift={board.shiftClock}
+          onSet={board.setClock}
+          onResetClock={board.resetClock}
+          onResetBoard={() => void board.reset()}
+        />
 
-  return (
-    <div className="flex flex-col gap-4">
-      <ClockControl
-        now={board.now}
-        clockShifted={board.clockShifted}
-        onShift={board.shiftClock}
-        onSet={board.setClock}
-        onResetClock={board.resetClock}
-        onResetBoard={() => void board.reset()}
-      />
-
-      <Tabs defaultValue="board">
-        <TabsList>
-          <TabsTrigger value="board">
-            <LayoutGridIcon className="size-3.5" aria-hidden />
-            Доска
-          </TabsTrigger>
-          <TabsTrigger value="log">
-            <ScrollTextIcon className="size-3.5" aria-hidden />
-            Журнал попыток
-            {board.attempts.length > 0 && (
-              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                {board.attempts.length}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="board" className="mt-3">
+        <TabsContent value="board" className="m-0">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
@@ -186,12 +176,44 @@ export function StatusBoard() {
           </DndContext>
         </TabsContent>
 
-        <TabsContent value="log" className="mt-3">
+        <TabsContent value="log" className="m-0">
           <EventLog entries={board.attempts} resolveModel={resolveModel} />
         </TabsContent>
-      </Tabs>
+      </div>
+    );
+  }
+
+  return (
+    // Корень Tabs охватывает и шапку, и содержимое: переключатель живёт
+    // в шапке, а панели — ниже, и оба должны видеть одно состояние.
+    <Tabs defaultValue="board">
+      <header className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Статусы ноутбука на складе</h1>
+
+        <Badge variant="outline" className="font-mono text-[11px]">
+          окно возврата: {RETURN_WINDOW_DAYS} дней
+        </Badge>
+
+        <TabsList className="ml-auto">
+          <TabsTrigger value="board">
+            <LayoutGridIcon className="size-3.5" aria-hidden />
+            Доска
+          </TabsTrigger>
+          <TabsTrigger value="log">
+            <ScrollTextIcon className="size-3.5" aria-hidden />
+            Журнал попыток
+            {board.attempts.length > 0 && (
+              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {board.attempts.length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </header>
+
+      {body}
 
       <HistoryDialog item={historyItem} onClose={() => setHistoryId(null)} />
-    </div>
+    </Tabs>
   );
 }
